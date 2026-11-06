@@ -50,3 +50,11 @@ or as a plain `java -jar` on the host — no Kubernetes required.
 See `docs/EVIDENCE.md`. Measured +97% on scattered-symbol tasks against this repo's own source
 (WITH-MCP digests+span vs reading whole candidate files). Reproduce with `scripts/ab-harness.py`
 (real tiktoken) or `HarnessServiceIT` (headless, CI).
+
+
+## How the three apps fit together
+
+For the full explanation of how **rag-app** (concepts/docs), **code-memory** (fuzzy code recall),
+and **context-mcp** (exact code + live git state) compose into one AI context-retrieval system —
+including the tool-routing decision table and end-to-end flow — see
+[`docs/ARCHITECTURE-THREE-APPS.md`](docs/ARCHITECTURE-THREE-APPS.md).
