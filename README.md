@@ -8,6 +8,30 @@ agent spends rediscovering a codebase. A token-savings ledger and an A/B harness
 
 Clean-room sibling of `code-memory`, built to compare designs.
 
+## What it's for / what questions it answers
+
+context-mcp is the **exact-code + live-state layer**, and the **single MCP endpoint** the AI talks to
+(it also federates to the other two). It answers precise, token-cheap questions about code you can
+name, plus what you're editing *right now* — returning one symbol's skeleton or span, never a whole
+file.
+
+Use it to answer:
+- "Jump to `effectiveTopK` / show me `RetrieveController`." → exact symbol, signature, or span.
+- "Give me the outline of this file." → every symbol's one-line skeleton.
+- "Show the body of just this method." → `expand` returns that span only.
+- "What calls this symbol, and which tests cover it?" → `impact_of` (blast radius).
+- "What am I changing right now?" → `working_changes` (uncommitted diff vs HEAD).
+- "What changed recently?" → `recent_changes` (commits).
+- "How many tokens am I saving?" → `ledger`.
+
+It also exposes two **federated** tools so the AI needs only one endpoint:
+- `explain(query)` → rag-app (concept/doc answers).
+- `recall(query)` → code-memory (fuzzy code recall).
+
+So across the three: **concept → `explain` (rag-app); fuzzy where → `recall` (code-memory); exact
+where/show + live edits → native context-mcp tools.** Full routing and flow in
+`docs/ARCHITECTURE-THREE-APPS.md`.
+
 ## Tools (MCP, JSON-RPC over stdio)
 
 `outline` · `search_symbols` · `get_digest` · `expand` · `impact_of` · `recent_changes` ·
