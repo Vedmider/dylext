@@ -1,0 +1,29 @@
+# Local stack: pgvector + the context-mcp app (web mode). Data is ephemeral.
+services:
+  pg:
+    image: ${PGVECTOR_IMAGE:-pgvector/pgvector:pg16}
+    environment:
+      POSTGRES_DB: contextmcp
+      POSTGRES_USER: contextmcp
+      POSTGRES_PASSWORD: contextmcp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contextmcp"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    image: ${APP_IMAGE:-context-mcp:0.1.0}
+    depends_on:
+      pg:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://pg:5432/contextmcp
+      DB_USERNAME: contextmcp
+      DB_PASSWORD: contextmcp
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    # Mount a repo read-only to index it from inside the container:
+    #   REPO_MOUNT=/path/to/repo docker compose up
+    volumes:
+      - ${REPO_MOUNT:-./}:/workspace:ro
