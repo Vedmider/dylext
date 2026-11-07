@@ -6,8 +6,6 @@ working-tree changes) in Postgres, and serves them to an AI agent **digest-first
 on search/outline, raw source spans only on demand via `expand`. The goal is to cut the tokens an
 agent spends rediscovering a codebase. A token-savings ledger and an A/B harness measure it.
 
-Clean-room sibling of `code-memory`, built to compare designs.
-
 ## What it's for / what questions it answers
 
 context-mcp is the **exact-code + live-state layer**, and the **single MCP endpoint** the AI talks to
