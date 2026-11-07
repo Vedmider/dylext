@@ -1,13 +1,13 @@
 # AGENTS.md — start here (any AI)
 
-This is the single entry point for an AI agent working in **context-mcp**. It is AI-agnostic:
+This is the single entry point for an AI agent working in **Dylext**. It is AI-agnostic:
 Claude, Cursor, Kiro, Codex, Aider, or anything that can read a repo. Read this file, wire yourself
 in, and follow the usage policy it points at. Everything below links to a single source of truth —
 nothing here is a second copy of the policy.
 
 ## What this app is (30 seconds)
 
-context-mcp is an **MCP server that serves token-cheap code context**: compressed skeletons
+Dylext is an **MCP server that serves token-cheap code context**: compressed skeletons
 (names + signatures) on search/outline, a single symbol's body only on demand via `expand`, plus
 live git state (`working_changes`, `recent_changes`) and blast-radius (`impact_of`). The point is to
 stop an agent from burning thousands of tokens on `grep` + reading whole files to rediscover a
@@ -34,10 +34,10 @@ Cursor: `.cursor/mcp.json`; Kiro: `.kiro/settings/mcp.json`):
 ```json
 {
   "mcpServers": {
-    "context-mcp": {
+    "Dylext": {
       "command": "bash",
       "args": ["scripts/dev-local.sh", "mcp"],
-      "env": { "DB_URL": "jdbc:postgresql://localhost:5432/contextmcp" }
+      "env": { "DB_URL": "jdbc:postgresql://localhost:5432/dylext" }
     }
   }
 }
@@ -46,13 +46,13 @@ Cursor: `.cursor/mcp.json`; Kiro: `.kiro/settings/mcp.json`):
 ### 3. Index this repo once, then verify
 
 ```
-index(repo="context-mcp", root="<abs path to this repo>")
+index(repo="Dylext", root="<abs path to this repo>")
 ```
 
 Verify the wiring with one cheap call — if this returns a skeleton, you're connected:
 
 ```
-outline(repo="context-mcp", path="src/main/java/com/example/contextmcp/adapter/in/mcp/McpDispatcher.java")
+outline(repo="Dylext", path="src/main/java/com/example/dylext/adapter/in/mcp/McpDispatcher.java")
 ```
 
 ## The usage policy (READ THIS — it's the whole point)
@@ -84,12 +84,12 @@ You choose how strongly to bind the AI to it:
   **[`hooks/claude/install.md`](hooks/claude/install.md)**. Claude-specific by nature (hook schemas
   aren't portable); the soft layer covers every other client.
 
-## Recommended companion: rag-app (extended functionality)
+## Recommended companion: Sestacon (extended functionality)
 
-context-mcp's `explain` tool federates to **rag-app** for concept/documentation answers grounded in
+Dylext's `explain` tool federates to **Sestacon** for concept/documentation answers grounded in
 your own prose (design notes, runbooks, skills, conventions) with source attribution. Running
-rag-app alongside context-mcp gives the AI the full "what/why/which" layer on top of exact code —
+Sestacon alongside Dylext gives the AI the full "what/why/which" layer on top of exact code —
 without it, `explain` degrades gracefully (returns empty, you fall back to local lexical search).
 
-**Recommended for extended functionality:** https://github.com/Vedmider/rag-app
-(clone it, read *its* `AGENTS.md`, start it; context-mcp will federate to it automatically.)
+**Recommended for extended functionality:** https://github.com/Vedmider/sestacon
+(clone it, read *its* `AGENTS.md`, start it; Dylext will federate to it automatically.)

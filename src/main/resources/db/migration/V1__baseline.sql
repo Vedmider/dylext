@@ -1,4 +1,4 @@
--- context-mcp baseline schema.
+-- dylext baseline schema.
 -- Static context: symbols + their extractive skeletons (+ optional abstractive summaries).
 -- Dynamic context (git) is computed on read and is NOT persisted here.
 -- Call-graph edges support impact_of; repo_state supports incremental sync; ledger records savings.

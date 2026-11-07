@@ -15,7 +15,7 @@ RUN --mount=type=secret,id=m2settings,target=/root/.m2/settings.xml,required=fal
 FROM ${REGISTRY}/eclipse-temurin:21-jre AS runtime
 WORKDIR /app
 RUN groupadd -r app -g 10001 && useradd -r -g app -u 10001 -s /usr/sbin/nologin app
-COPY --from=build /build/target/context-mcp-*.jar /app/app.jar
+COPY --from=build /build/target/dylext-*.jar /app/app.jar
 USER app
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

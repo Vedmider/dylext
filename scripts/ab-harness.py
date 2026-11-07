@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""External A/B token-savings proof for context-mcp, using the REAL tokenizer (tiktoken cl100k).
+"""External A/B token-savings proof for dylext, using the REAL tokenizer (tiktoken cl100k).
 
-For each task it talks to a running context-mcp over stdio JSON-RPC:
+For each task it talks to a running dylext over stdio JSON-RPC:
   WITH-MCP   = search_symbols -> the digests served (+ one expand span when drilling in)
   WITHOUT    = read, whole, every file that holds a candidate symbol
 
@@ -9,7 +9,7 @@ Both sides are tokenized with tiktoken so the comparison is apples-to-apples. Th
 HarnessServiceIT proves the same logic headlessly in CI; this script is the external, real-
 tokenizer version for the evidence doc.
 
-Run (server must be started with contextmcp.mcp.stdio=true, repo already indexed):
+Run (server must be started with dylext.mcp.stdio=true, repo already indexed):
   PY=~/.kiro/crew-venv/bin/python3.12 $PY scripts/ab-harness.py --repo self --root src/main/java
 """
 import argparse
@@ -38,7 +38,7 @@ class Mcp:
         self.p = subprocess.Popen(
             [env.get("JAVA", "java"), "-jar", jar],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            env={**os.environ, "contextmcp.mcp.stdio": "true", **env},
+            env={**os.environ, "dylext.mcp.stdio": "true", **env},
             text=True, bufsize=1)
         self._id = 0
 
@@ -66,7 +66,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", required=True)
     ap.add_argument("--root", required=True)
-    ap.add_argument("--jar", default="target/context-mcp-0.1.0.jar")
+    ap.add_argument("--jar", default="target/dylext-0.1.0.jar")
     args = ap.parse_args()
 
     mcp = Mcp(args.jar, {})

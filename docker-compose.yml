@@ -1,26 +1,26 @@
-# Local stack: pgvector + the context-mcp app (web mode). Data is ephemeral.
+# Local stack: pgvector + the dylext app (web mode). Data is ephemeral.
 services:
   pg:
     image: ${PGVECTOR_IMAGE:-pgvector/pgvector:pg16}
     environment:
-      POSTGRES_DB: contextmcp
-      POSTGRES_USER: contextmcp
-      POSTGRES_PASSWORD: contextmcp
+      POSTGRES_DB: dylext
+      POSTGRES_USER: dylext
+      POSTGRES_PASSWORD: dylext
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U contextmcp"]
+      test: ["CMD-SHELL", "pg_isready -U dylext"]
       interval: 3s
       timeout: 3s
       retries: 20
 
   app:
-    image: ${APP_IMAGE:-context-mcp:0.1.0}
+    image: ${APP_IMAGE:-dylext:0.1.0}
     depends_on:
       pg:
         condition: service_healthy
     environment:
-      DB_URL: jdbc:postgresql://pg:5432/contextmcp
-      DB_USERNAME: contextmcp
-      DB_PASSWORD: contextmcp
+      DB_URL: jdbc:postgresql://pg:5432/dylext
+      DB_USERNAME: dylext
+      DB_PASSWORD: dylext
     ports:
       - "${APP_PORT:-8080}:8080"
     # Mount a repo read-only to index it from inside the container:

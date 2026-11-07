@@ -1,4 +1,4 @@
-# context-mcp
+# Dylext
 
 An AI code-context **MCP server**. It keeps a codebase's **static context** (compressed code
 skeletons: names + signatures + call targets) and **dynamic context** (git history + uncommitted
@@ -8,7 +8,7 @@ agent spends rediscovering a codebase. A token-savings ledger and an A/B harness
 
 ## What it's for / what questions it answers
 
-context-mcp is the **exact-code + live-state layer**, and the **single MCP endpoint** the AI talks to
+Dylext is the **exact-code + live-state layer**, and the **single MCP endpoint** the AI talks to
 (it also federates to the other two). It answers precise, token-cheap questions about code you can
 name, plus what you're editing *right now* — returning one symbol's skeleton or span, never a whole
 file.
@@ -23,11 +23,11 @@ Use it to answer:
 - "How many tokens am I saving?" → `ledger`.
 
 It also exposes two **federated** tools so the AI needs only one endpoint:
-- `explain(query)` → rag-app (concept/doc answers).
+- `explain(query)` → Sestacon (concept/doc answers).
 - `recall(query)` → code-memory (fuzzy code recall).
 
-So across the three: **concept → `explain` (rag-app); fuzzy where → `recall` (code-memory); exact
-where/show + live edits → native context-mcp tools.** Full routing and flow in
+So across the three: **concept → `explain` (Sestacon); fuzzy where → `recall` (code-memory); exact
+where/show + live edits → native Dylext tools.** Full routing and flow in
 `docs/ARCHITECTURE-THREE-APPS.md`.
 
 ## Tools (MCP, JSON-RPC over stdio)
@@ -76,7 +76,7 @@ See `docs/EVIDENCE.md`. Measured +97% on scattered-symbol tasks against this rep
 
 ## How the three apps fit together
 
-For the full explanation of how **rag-app** (concepts/docs), **code-memory** (fuzzy code recall),
-and **context-mcp** (exact code + live git state) compose into one AI context-retrieval system —
+For the full explanation of how **Sestacon** (concepts/docs), **code-memory** (fuzzy code recall),
+and **Dylext** (exact code + live git state) compose into one AI context-retrieval system —
 including the tool-routing decision table and end-to-end flow — see
 [`docs/ARCHITECTURE-THREE-APPS.md`](docs/ARCHITECTURE-THREE-APPS.md).

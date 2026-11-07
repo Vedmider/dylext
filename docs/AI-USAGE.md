@@ -1,13 +1,13 @@
 # AI usage guide — the local context toolset
 
-You (the AI) have ONE MCP endpoint: **context-mcp**. It serves code context directly and federates
+You (the AI) have ONE MCP endpoint: **Dylext**. It serves code context directly and federates
 to two siblings at their strongest:
 
-- **rag-app** — conceptual / documentation retrieval over prose (docs, skills, agents, conventions).
+- **Sestacon** — conceptual / documentation retrieval over prose (docs, skills, agents, conventions).
   Reached via the `explain` tool.
 - **code-memory** — fuzzy, graph-ranked recall across a codebase (hybrid vector+text, PageRank).
   Reached via the `recall` tool.
-- **context-mcp** (local) — token-exact code structure, spans, call graph, and live git state.
+- **Dylext** (local) — token-exact code structure, spans, call graph, and live git state.
 
 Route each question to the cheapest tool that can answer it. Find with `explain`/`recall`/`search`;
 read bytes only with `expand`.
@@ -16,14 +16,14 @@ read bytes only with `expand`.
 
 | The question is… | Tool | Backing app |
 |---|---|---|
-| concept / "what / why / which / convention / explain" | `explain(query)` | rag-app |
+| concept / "what / why / which / convention / explain" | `explain(query)` | Sestacon |
 | fuzzy code / "where is the X logic", name unknown | `recall(query)` | code-memory |
-| known identifier / "jump to NAME", list a file's symbols | `search_symbols` / `outline` | context-mcp |
-| read one symbol's body | `get_digest` then `expand(symbolId)` | context-mcp |
-| blast radius / "what calls this, which tests cover it" | `impact_of(symbolId)` | context-mcp |
-| live edits / "what am I changing right now" | `working_changes()` | context-mcp |
-| history / "what changed recently" | `recent_changes()` | context-mcp |
-| how many tokens am I saving | `ledger()` | context-mcp |
+| known identifier / "jump to NAME", list a file's symbols | `search_symbols` / `outline` | Dylext |
+| read one symbol's body | `get_digest` then `expand(symbolId)` | Dylext |
+| blast radius / "what calls this, which tests cover it" | `impact_of(symbolId)` | Dylext |
+| live edits / "what am I changing right now" | `working_changes()` | Dylext |
+| history / "what changed recently" | `recent_changes()` | Dylext |
+| how many tokens am I saving | `ledger()` | Dylext |
 
 ## Progressive disclosure (always)
 
@@ -37,7 +37,7 @@ body. `expand` returns exactly that symbol's span — never a whole file.
 - Natural-language intent, no symbol name yet? `recall` (for code) or `explain` (for docs/behaviour)
   FIRST; let the hit name a symbol; THEN `search_symbols` → `expand` for the exact bytes.
 - Behaviour described in docs/skills/conventions? `explain`, let it point you at the code, then
-  descend into context-mcp.
+  descend into Dylext.
 - Actively editing? `working_changes()` before reading committed code — it shows your uncommitted diff.
 
 ## Token discipline
@@ -48,8 +48,8 @@ body. `expand` returns exactly that symbol's span — never a whole file.
 
 ## Degrade gracefully
 
-`explain` and `recall` return an empty list when rag-app / code-memory is down. On empty, fall back
-to context-mcp's local `search_symbols` (lexical) — you can still locate exact identifiers offline.
+`explain` and `recall` return an empty list when Sestacon / code-memory is down. On empty, fall back
+to Dylext's local `search_symbols` (lexical) — you can still locate exact identifiers offline.
 
 ## Worked example — "fix a bug in rate limiting"
 

@@ -1,5 +1,5 @@
 ---
-description: context-mcp usage policy — how and when to use the MCP tools instead of native grep/read
+description: Dylext usage policy — how and when to use the MCP tools instead of native grep/read
 alwaysApply: true
 ---
 

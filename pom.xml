@@ -11,10 +11,10 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.example</groupId>
-    <artifactId>context-mcp</artifactId>
+    <groupId>io.github.vedmider</groupId>
+    <artifactId>dylext</artifactId>
     <version>0.1.0</version>
-    <name>context-mcp</name>
+    <name>dylext</name>
     <description>AI code-context MCP server: digest-first compression, static + dynamic context, token-savings ledger</description>
 
     <properties>

@@ -1,11 +1,11 @@
-# Skill: context-mcp — exact code + live state (and the MCP front door)
+# Skill: Dylext — exact code + live state (and the MCP front door)
 
-Provider-agnostic guidance for an AI agent on using **context-mcp**. Reformat the wrapper for your
+Provider-agnostic guidance for an AI agent on using **Dylext**. Reformat the wrapper for your
 assistant; the body is the skill.
 
 ## What this app is
 
-context-mcp is the **single MCP endpoint** the agent talks to. It serves **exact code structure**
+Dylext is the **single MCP endpoint** the agent talks to. It serves **exact code structure**
 (symbol skeletons and spans) and **live git state** (recent commits + uncommitted working-tree diff),
 **digest-first**: cheap skeletons on search/outline, raw source spans only on demand. It never returns
 a whole file when a symbol span will do — that's the token saving. It also **federates** to the other
@@ -19,7 +19,7 @@ Tools (JSON-RPC over stdio):
 - `recent_changes(repo)` / `working_changes(repo)` — commits / **uncommitted** diff vs HEAD.
 - `index(repo, root)` / `sync(repo, root)` — build / incrementally refresh.
 - `ledger()` — running token-savings totals.
-- Federated: `explain(query)` → rag-app (concepts/docs); `recall(query)` → code-memory (fuzzy code).
+- Federated: `explain(query)` → Sestacon (concepts/docs); `recall(query)` → code-memory (fuzzy code).
 
 ## When to USE it
 
@@ -33,8 +33,8 @@ Tools (JSON-RPC over stdio):
 ## When NOT to use it
 
 - Fuzzy "where is the X logic", name unknown → `recall` (code-memory) first, then come back to expand.
-- Conceptual "what/why/convention" question → `explain` (rag-app).
-- Arbitrary text/regex, logs, config, unindexed or non-Java files → **grep/ripgrep** (context-mcp
+- Conceptual "what/why/convention" question → `explain` (Sestacon).
+- Arbitrary text/regex, logs, config, unindexed or non-Java files → **grep/ripgrep** (Dylext
   indexes Java symbols only; it is not a free-text search).
 - "Find every textual occurrence" → grep guarantees exhaustiveness; symbol search returns resolved,
   fewer, ranked hits.
@@ -53,8 +53,8 @@ Tools (JSON-RPC over stdio):
 
 ## Fits with the other two apps
 
-concept/docs → `explain` (**rag-app**) · fuzzy "where is the code" → `recall` (**code-memory**) ·
-exact code + live edits → native **context-mcp** tools. Full routing: `docs/AI-USAGE.md` and
+concept/docs → `explain` (**Sestacon**) · fuzzy "where is the code" → `recall` (**code-memory**) ·
+exact code + live edits → native **Dylext** tools. Full routing: `docs/AI-USAGE.md` and
 `docs/ARCHITECTURE-THREE-APPS.md`.
 
 

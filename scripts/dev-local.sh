@@ -1,5 +1,5 @@
 #!/bin/bash
-# Local dev loop for context-mcp. Brings up pgvector + the app as containers, checks health,
+# Local dev loop for dylext. Brings up pgvector + the app as containers, checks health,
 # and can run the token-savings harness. All data is ephemeral.
 #
 #   bash scripts/dev-local.sh up        # build image (via mirror) + compose up + wait health
@@ -13,7 +13,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MIRROR="${MIRROR:-armdocker.rnd.ericsson.se/dockerhub-ericsson-remote}"
 export REGISTRY="${REGISTRY:-$MIRROR/library}"
 export PGVECTOR_IMAGE="${PGVECTOR_IMAGE:-$MIRROR/pgvector/pgvector:pg16}"
-export APP_IMAGE="${APP_IMAGE:-context-mcp:0.1.0}"
+export APP_IMAGE="${APP_IMAGE:-dylext:0.1.0}"
 export APP_PORT="${APP_PORT:-8080}"
 BASE="http://localhost:${APP_PORT}"
 
@@ -51,11 +51,11 @@ test_harness() {
 }
 
 mcp_stdio() {
-  local jar="$REPO/target/context-mcp-0.1.0.jar"
+  local jar="$REPO/target/dylext-0.1.0.jar"
   [ -f "$jar" ] || ( cd "$REPO" && source env.sh && mvn -B -q -DskipTests package )
-  echo "== context-mcp stdio MCP server (Ctrl-D to quit) =="
-  java -Dcontextmcp.mcp.stdio=true \
-       -DDB_URL="${DB_URL:-jdbc:postgresql://localhost:5432/contextmcp}" \
+  echo "== dylext stdio MCP server (Ctrl-D to quit) =="
+  java -Ddylext.mcp.stdio=true \
+       -DDB_URL="${DB_URL:-jdbc:postgresql://localhost:5432/dylext}" \
        -jar "$jar"
 }
 

@@ -1,4 +1,4 @@
-# Token-savings evidence — context-mcp
+# Token-savings evidence — Dylext
 
 The product metric is **net tokens saved per task**. We prove it with an A/B harness that runs a
 fixed set of real tasks two ways over the same indexed repo:
@@ -9,7 +9,7 @@ fixed set of real tasks two ways over the same indexed repo:
 
 Both sides are tokenized with the *same* tokenizer so the comparison is apples-to-apples.
 
-## Measured (fixture = context-mcp's own `src/main/java`)
+## Measured (fixture = Dylext's own `src/main/java`)
 
 | task | hits | files | WITH-MCP | WITHOUT | saved |
 |---|---:|---:|---:|---:|---:|

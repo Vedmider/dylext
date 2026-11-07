@@ -1,14 +1,14 @@
 # Hard enforcement (opt-in) — Claude Code
 
 The usage policy in [`../../AGENTS.md`](../../AGENTS.md) is advisory: an autonomous agent *should*
-prefer context-mcp's tools over native `grep`, but under context pressure it may not. If you observe
+prefer Dylext's tools over native `grep`, but under context pressure it may not. If you observe
 that, this adds a **speed bump** — not a cage.
 
 ## What it does
 
 Registers a Claude Code **`PreToolUse`** hook on the native **`Grep`** and **`Glob`** tools. Before
 either runs, the hook returns a `permissionDecision: "ask"` — Claude pauses and asks you to confirm,
-with a reason pointing at the cheaper context-mcp tools (`recall`, `search_symbols`, `outline`).
+with a reason pointing at the cheaper Dylext tools (`recall`, `search_symbols`, `outline`).
 
 - It **asks**, it does not **block**. Legitimate searches (logs, config, non-indexed text) proceed
   the moment you confirm. This is deliberate — a hard block trains the agent to route around it

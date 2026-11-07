@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash hooks/claude/ask-use-context-mcp.sh"
+            "command": "bash hooks/claude/ask-use-dylext.sh"
           }
         ]
       }
