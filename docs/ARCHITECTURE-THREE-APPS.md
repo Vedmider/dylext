@@ -175,5 +175,27 @@ AI agent ──stdio MCP──▶ context-mcp (java -jar, contextmcp.mcp.stdio=t
   common agent case; a task that genuinely needs a whole large file read saves little.
 
 See also: `AI-USAGE.md` (the terse routing guide mirrored into tool descriptions),
+## 9. Orientation prerequisite (why before where)
+
+Before navigating a repo, the AI should *orient* like a human: know why the repo exists, its
+structure, and which part maps to which functionality. That knowledge lives in **rag-app** as the
+repo's explanatory content and must be ingested **before** work (static docs the repo ships, or an
+analyze-once result the AI generates and ingests under `explain:<repo>:...`). The code-location apps
+(code-memory, context-mcp) answer *where*; rag-app's explanatory content answers *why*. See
+`rag-app/docs/SKILL.md` → "PREREQUISITE".
+
+## 10. Session memory (AI task reflection)
+
+The AI's working memory for a **task** is a session, kept in **context-mcp** in an isolated store
+(own table/port/tools, never mixed with code context). A session spans the whole task — code
+`changes[]`, doc `findings[]`, `decisions[]`, `openThreads[]`, and `refs[]` pointing at docs/symbols
+— keyed by task id and retrieved by exact id like a database record. Tools: `session_start`,
+`session_recall`, `session_append`, `session_list`, `session_close` (+ `session_purge`/TTL for
+cleanup). This gives the "keep in mind what I changed, where, and why; resume where I left off"
+behaviour. See `context-mcp/docs/SKILL.md` → "Session memory".
+
+## See also
+
+`AI-USAGE.md` (the terse routing guide mirrored into tool descriptions),
 `GAP-COMPARISON.md` (context-mcp vs code-memory design comparison), and `EVIDENCE.md`
 (token-savings measurements).

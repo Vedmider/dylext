@@ -56,3 +56,52 @@ Tools (JSON-RPC over stdio):
 concept/docs → `explain` (**rag-app**) · fuzzy "where is the code" → `recall` (**code-memory**) ·
 exact code + live edits → native **context-mcp** tools. Full routing: `docs/AI-USAGE.md` and
 `docs/ARCHITECTURE-THREE-APPS.md`.
+
+
+---
+
+## Session memory (AI task reflection)
+
+A **session is the AI's working memory for a task** — not a per-repo log. It spans everything the
+agent did for that task: code edits, doc findings, decisions, and the refs tying them together. Use
+it to resume work exactly where you left off, and to recall "what did I change, where, and why."
+
+Model (keyed by task id, repo is optional):
+```
+session:<id>
+  task         goal
+  status       active | done
+  repos[]      repos touched (0..n)
+  decisions[]  {what, why}
+  changes[]    {repo?, file?, symbol?, what, why}
+  findings[]   what I learned (docs read, answers, dead-ends)
+  openThreads[] next steps
+  refs[]       pointers: doc sources (rag-app), symbols (context-mcp/code-memory), tickets, URLs
+  updatedAt
+```
+
+Tools (isolated from code tools — they touch only session records):
+- `session_start(task)` → new session id.
+- `session_recall(id)` → the full record (resume a task).
+- `session_append(id, {change|decision|finding|thread|ref})` → add to memory.
+- `session_list(repo? | status? | text?)` → "what was I working on".
+- `session_close(id)` → mark done.
+
+Retrieval is by **exact id** (like a database record), so a session query returns *only* session
+records — never code context, and code tools never return sessions.
+
+### Workflow
+1. At task start: `session_start(task)`; if resuming, `session_recall(id)` first.
+2. As you work: `session_append` a decision/change/finding whenever you make one — keep entries short
+   and structured. Lists are bounded (newest kept); no LLM summarization required (provider-agnostic).
+3. Reference, don't duplicate: put doc/symbol pointers in `refs[]` rather than pasting content.
+4. At task end: `session_close(id)`.
+
+### Cleanup
+Sessions are durable and would grow unbounded, so the store evicts: closed sessions purged after a
+grace period, idle active sessions after a TTL, with a max-rows back-pressure cap. Use `session_purge`
+(or the scheduled sweep) — never hand-delete rows.
+
+> Note: v1 keeps session entries as bounded structured lists (no auto-compaction). If a session gets
+> large, the AI may write its own one-line summary via a normal `session_append` — the store never
+> calls a model, so this stays provider-agnostic.
