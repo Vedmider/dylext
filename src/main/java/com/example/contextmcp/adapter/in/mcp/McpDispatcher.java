@@ -27,11 +27,13 @@ public class McpDispatcher {
     private final LedgerUseCase ledger;
     private final com.example.contextmcp.domain.port.in.SyncUseCase sync;
     private final com.example.contextmcp.domain.port.in.FederatedContextUseCase federated;
+    private final com.example.contextmcp.domain.port.in.SessionUseCase session;
 
     public McpDispatcher(IndexUseCase index, RetrieveUseCase retrieve, ImpactUseCase impact,
                          DynamicContextUseCase dynamic, LedgerUseCase ledger,
                          com.example.contextmcp.domain.port.in.SyncUseCase sync,
-                         com.example.contextmcp.domain.port.in.FederatedContextUseCase federated) {
+                         com.example.contextmcp.domain.port.in.FederatedContextUseCase federated,
+                         com.example.contextmcp.domain.port.in.SessionUseCase session) {
         this.index = index;
         this.retrieve = retrieve;
         this.impact = impact;
@@ -39,6 +41,7 @@ public class McpDispatcher {
         this.ledger = ledger;
         this.sync = sync;
         this.federated = federated;
+        this.session = session;
     }
 
     /** @return the JSON-RPC response string, or null for a notification (no id). */
@@ -89,6 +92,12 @@ public class McpDispatcher {
         tools.add(tool("sync", "Refresh a repo's index.", "repo", "root"));
         tools.add(tool("explain", "Concept/doc answer via rag-app (what/why/which/convention). Use for NL intent.", "query"));
         tools.add(tool("recall", "Fuzzy graph-ranked code recall via code-memory (where-is, name unknown).", "query"));
+        tools.add(tool("session_start", "Start a task-reflection session; returns its id.", "task"));
+        tools.add(tool("session_recall", "Load a session by id (resume a task).", "id"));
+        tools.add(tool("session_append", "Add a decision/finding/openThread/change/ref/repo to a session.", "id"));
+        tools.add(tool("session_list", "List sessions (filter by repo/status/text).")); // no required args
+        tools.add(tool("session_close", "Mark a session done.", "id"));
+        tools.add(tool("session_purge", "Evict expired sessions (TTL sweep)."));  // no required args
         tools.add(tool("ledger", "Running token-savings totals.")); // no required args
         ObjectNode r = json.createObjectNode();
         r.set("tools", tools);
@@ -114,6 +123,14 @@ public class McpDispatcher {
             case "explain" -> federated.explain(req(args, "query"),
                     args.path("roles").asText(null), clampTopK(args, 3));
             case "recall" -> federated.recall(req(args, "query"), clampTopK(args, 5));
+            case "session_start" -> session.start(req(args, "task"));
+            case "session_recall" -> session.recall(req(args, "id")).orElse(null);
+            case "session_list" -> session.list(args.path("repo").asText(null),
+                    parseStatus(args.path("status").asText(null)),
+                    args.path("text").asText(null), clampTopK(args, 50));
+            case "session_close" -> session.close(req(args, "id"));
+            case "session_append" -> session.append(req(args, "id"), parseAppend(args));
+            case "session_purge" -> java.util.Map.of("purged", session.purge());
             case "ledger" -> ledger.totals();
             default -> throw new IllegalArgumentException("unknown tool: " + name);
         };
@@ -142,6 +159,44 @@ public class McpDispatcher {
     }
 
     private static final int MAX_FANOUT = 50;
+
+    private com.example.contextmcp.domain.model.Session.Status parseStatus(String s) {
+        if (s == null || s.isBlank()) {
+            return null;
+        }
+        return com.example.contextmcp.domain.model.Session.Status.valueOf(s.toUpperCase());
+    }
+
+    private com.example.contextmcp.domain.port.in.SessionUseCase.Append parseAppend(JsonNode args) {
+        return new com.example.contextmcp.domain.port.in.SessionUseCase.Append(
+                entry(args.get("decision")),
+                entry(args.get("finding")),
+                entry(args.get("openThread")),
+                change(args.get("change")),
+                ref(args.get("ref")),
+                args.path("repo").asText(null));
+    }
+
+    private static com.example.contextmcp.domain.model.Session.Entry entry(JsonNode n) {
+        return n == null || n.isNull() ? null
+                : new com.example.contextmcp.domain.model.Session.Entry(
+                        n.path("what").asText(""), n.path("why").asText(""));
+    }
+
+    private static com.example.contextmcp.domain.model.Session.Change change(JsonNode n) {
+        return n == null || n.isNull() ? null
+                : new com.example.contextmcp.domain.model.Session.Change(
+                        n.path("repo").asText(null), n.path("file").asText(null),
+                        n.path("symbol").asText(null), n.path("what").asText(""),
+                        n.path("why").asText(""));
+    }
+
+    private static com.example.contextmcp.domain.model.Session.Ref ref(JsonNode n) {
+        return n == null || n.isNull() ? null
+                : new com.example.contextmcp.domain.model.Session.Ref(
+                        n.path("kind").asText(""), n.path("value").asText(""));
+    }
+
 
     private static int clampTopK(JsonNode args, int fallback) {
         return clamp(args.path("topK").asInt(fallback), fallback);

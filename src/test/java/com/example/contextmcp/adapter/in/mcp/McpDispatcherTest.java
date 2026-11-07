@@ -41,11 +41,13 @@ class McpDispatcherTest {
             mock(com.example.contextmcp.domain.port.in.SyncUseCase.class);
     private final com.example.contextmcp.domain.port.in.FederatedContextUseCase federated =
             mock(com.example.contextmcp.domain.port.in.FederatedContextUseCase.class);
+    private final com.example.contextmcp.domain.port.in.SessionUseCase session =
+            mock(com.example.contextmcp.domain.port.in.SessionUseCase.class);
     private McpDispatcher dispatcher;
 
     @BeforeEach
     void setup() {
-        dispatcher = new McpDispatcher(index, retrieve, impact, dynamic, ledger, sync, federated);
+        dispatcher = new McpDispatcher(index, retrieve, impact, dynamic, ledger, sync, federated, session);
         when(ledger.totals()).thenReturn(new Totals(3, 100, 400));
     }
 
@@ -192,6 +194,54 @@ class McpDispatcherTest {
                 {"jsonrpc":"2.0","id":21,"method":"tools/call",
                  "params":{"name":"search_symbols","arguments":{"repo":"r","query":"q","topK":-5}}}""");
         verify(retrieve).searchSymbols("r", "q", 10);
+    }
+
+    @Test
+    void callSessionStartReturnsSession() throws Exception {
+        when(session.start("improve retrieval")).thenReturn(
+                com.example.contextmcp.domain.model.Session.start("s-1", "improve retrieval"));
+        JsonNode r = handle("""
+                {"jsonrpc":"2.0","id":30,"method":"tools/call",
+                 "params":{"name":"session_start","arguments":{"task":"improve retrieval"}}}""");
+        assertThat(r.path("result").path("content").get(0).path("json").path("id").asText())
+                .isEqualTo("s-1");
+    }
+
+    @Test
+    void callSessionAppendMapsChangeAndRef() throws Exception {
+        var s = com.example.contextmcp.domain.model.Session.start("s-2", "t");
+        when(session.append(org.mockito.ArgumentMatchers.eq("s-2"), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(s);
+        JsonNode r = handle("""
+                {"jsonrpc":"2.0","id":31,"method":"tools/call",
+                 "params":{"name":"session_append","arguments":{"id":"s-2",
+                   "change":{"repo":"r","file":"F.java","symbol":"F.m","what":"did","why":"g"},
+                   "ref":{"kind":"symbol","value":"r:F.java:F.m"}}}}""");
+        assertThat(r.path("result").path("content").get(0).path("json").path("id").asText())
+                .isEqualTo("s-2");
+        var cap = org.mockito.ArgumentCaptor.forClass(
+                com.example.contextmcp.domain.port.in.SessionUseCase.Append.class);
+        verify(session).append(org.mockito.ArgumentMatchers.eq("s-2"), cap.capture());
+        assertThat(cap.getValue().change().symbol()).isEqualTo("F.m");
+        assertThat(cap.getValue().ref().kind()).isEqualTo("symbol");
+    }
+
+    @Test
+    void callSessionListAdvertisedWithoutRequiredArgs() throws Exception {
+        when(session.list(any(), any(), any(), anyInt())).thenReturn(java.util.List.of());
+        JsonNode r = handle("""
+                {"jsonrpc":"2.0","id":32,"method":"tools/call",
+                 "params":{"name":"session_list","arguments":{"status":"ACTIVE"}}}""");
+        assertThat(r.path("result").path("content").get(0).path("json").isArray()).isTrue();
+    }
+
+    @Test
+    void sessionToolsAreListed() throws Exception {
+        JsonNode r = handle("""
+                {"jsonrpc":"2.0","id":33,"method":"tools/list"}""");
+        java.util.List<String> names = r.path("result").path("tools").findValuesAsText("name");
+        assertThat(names).contains("session_start", "session_recall", "session_append",
+                "session_list", "session_close");
     }
 
     @Test

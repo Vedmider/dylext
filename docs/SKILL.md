@@ -86,6 +86,7 @@ Tools (isolated from code tools — they touch only session records):
 - `session_append(id, {change|decision|finding|thread|ref})` → add to memory.
 - `session_list(repo? | status? | text?)` → "what was I working on".
 - `session_close(id)` → mark done.
+- `session_purge()` → evict expired sessions (TTL sweep; also runs on a schedule).
 
 Retrieval is by **exact id** (like a database record), so a session query returns *only* session
 records — never code context, and code tools never return sessions.
