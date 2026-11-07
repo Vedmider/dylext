@@ -63,46 +63,57 @@ exact code + live edits → native **context-mcp** tools. Full routing: `docs/AI
 ## Session memory (AI task reflection)
 
 A **session is the AI's working memory for a task** — not a per-repo log. It spans everything the
-agent did for that task: code edits, doc findings, decisions, and the refs tying them together. Use
-it to resume work exactly where you left off, and to recall "what did I change, where, and why."
+agent did for that task across repos, and lets a *new* session resume work and review **why** past
+decisions were made.
 
-Model (keyed by task id, repo is optional):
+Two layers, deliberately split so reloading a session stays cheap (keep the AI context window well
+under ~10% full):
+
 ```
 session:<id>
-  task         goal
-  status       active | done
-  repos[]      repos touched (0..n)
-  decisions[]  {what, why}
-  changes[]    {repo?, file?, symbol?, what, why}
-  findings[]   what I learned (docs read, answers, dead-ends)
-  openThreads[] next steps
-  refs[]       pointers: doc sources (rag-app), symbols (context-mcp/code-memory), tickets, URLs
+  task          goal
+  status        active | done
+  repos[]       repos touched (0..n)
+  decisions[]   durable "why" layer — {type(decision|finding|next), what, why, repo?, file?, symbol?, at}
+                batched at checkpoints; NEVER auto-evicted (this is the log you reload next session)
+  facts[]       cheap "what" layer — {type=fact, what, repo?, file?, symbol?, at}
+                streamed as you edit; bounded ring buffer (newest kept, oldest dropped)
   updatedAt
 ```
 
+Why two layers: decisions are few, carry rationale, and must survive for later sessions, so they are
+append-only. Facts are many, mechanical (derived from working_changes), and only the recent ones
+matter, so they are bounded — they can never bloat the record.
+
 Tools (isolated from code tools — they touch only session records):
 - `session_start(task)` → new session id.
-- `session_recall(id)` → the full record (resume a task).
-- `session_append(id, {change|decision|finding|thread|ref})` → add to memory.
-- `session_list(repo? | status? | text?)` → "what was I working on".
+- `session_fact(id, {repo?, file?, symbol?, what})` → stream **one** cheap edit-fact. Mechanical, no
+  why. Bounded.
+- `session_commit(id, entries[{type(decision|finding|next), what, why}])` → **batch** durable
+  decision-layer entries at a checkpoint. `type` defaults to `decision`. Never evicted. Returns a header.
+- `session_list(repo? | status? | text?)` → **headers only** (id, task, status, repos, decisionCount,
+  factCount) — "what was I working on". No bodies.
+- `session_recall(id, {full?, sections?[decisions|facts]})` → default = all decisions + the newest
+  facts only (bounded). `full:true` = everything; `sections` picks which layer(s) to return.
 - `session_close(id)` → mark done.
 - `session_purge()` → evict expired sessions (TTL sweep; also runs on a schedule).
 
 Retrieval is by **exact id** (like a database record), so a session query returns *only* session
 records — never code context, and code tools never return sessions.
 
-### Workflow
-1. At task start: `session_start(task)`; if resuming, `session_recall(id)` first.
-2. As you work: `session_append` a decision/change/finding whenever you make one — keep entries short
-   and structured. Lists are bounded (newest kept); no LLM summarization required (provider-agnostic).
-3. Reference, don't duplicate: put doc/symbol pointers in `refs[]` rather than pasting content.
-4. At task end: `session_close(id)`.
+### Workflow — capture discipline
+1. At task start: `session_start(task)`; if resuming, `session_recall(id)` first (default read is
+   bounded — open `full:true` only when you actually need old facts).
+2. As you edit: `session_fact` the mechanical "what" (repo/file/symbol changed). Stream freely — it's
+   cheap and bounded. **Never** commit decisions per human message.
+3. At checkpoints (a real decision taken, a finding learned, a next-step identified): one
+   `session_commit` with a small **batch** of decision-layer entries, each with a one-line `why`.
+   Batched, not per-sentence — this is what keeps the record small and the why durable.
+4. At task end: `session_commit` any closing decisions/next-steps, then `session_close(id)`.
 
 ### Cleanup
 Sessions are durable and would grow unbounded, so the store evicts: closed sessions purged after a
-grace period, idle active sessions after a TTL, with a max-rows back-pressure cap. Use `session_purge`
-(or the scheduled sweep) — never hand-delete rows.
+grace period, idle active sessions after a TTL, with a max-rows back-pressure cap. Facts are
+additionally capped per-session (ring buffer); decisions are never auto-evicted. Use `session_purge`
+(or the scheduled sweep) — never hand-delete rows. No LLM summarization anywhere (provider-agnostic).
 
-> Note: v1 keeps session entries as bounded structured lists (no auto-compaction). If a session gets
-> large, the AI may write its own one-line summary via a normal `session_append` — the store never
-> calls a model, so this stays provider-agnostic.

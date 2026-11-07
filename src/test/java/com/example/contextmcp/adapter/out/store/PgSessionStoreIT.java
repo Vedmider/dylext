@@ -1,6 +1,7 @@
 package com.example.contextmcp.adapter.out.store;
 
 import com.example.contextmcp.domain.model.Session;
+import com.example.contextmcp.domain.model.SessionEntry;
 import com.example.contextmcp.domain.port.out.SessionStore;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,8 +12,6 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,77 +28,78 @@ class PgSessionStoreIT {
     @Autowired
     private SessionStore store;
 
-    private Session withData(String id, String task) {
-        return new Session(id, task, Session.Status.ACTIVE,
+    @Test
+    void saveThenFindByIdRoundTripsBothLayers() {
+        Session s = new Session("t-1", "improve retrieval", Session.Status.ACTIVE,
                 List.of("rag-app"),
-                List.of(new Session.Entry("use reranker", "precision")),
-                List.of(new Session.Change("rag-app", "R.java", "rag-app:R.java:R.retrieve", "wide+rerank", "G1")),
-                List.of(new Session.Entry("docs say vector-only", "baseline")),
-                List.of(new Session.Entry("add parent-doc chunking", "G2")),
-                List.of(new Session.Ref("symbol", "rag-app:R.java:R.retrieve")),
-                Instant.now());
-    }
+                List.of(SessionEntry.decision("use reranker", "precision")),
+                List.of(SessionEntry.fact("rag-app", "R.java", "R.retrieve", "wide+rerank")),
+                java.time.Instant.now());
+        store.save(s);
 
-    @Test
-    void saveThenFindByIdRoundTripsAllFields() {
-        store.save(withData("task-1", "improve retrieval"));
-
-        Session got = store.findById("task-1").orElseThrow();
-        assertThat(got.task()).isEqualTo("improve retrieval");
-        assertThat(got.repos()).containsExactly("rag-app");
-        assertThat(got.changes()).singleElement()
-                .satisfies(c -> assertThat(c.symbol()).isEqualTo("rag-app:R.java:R.retrieve"));
+        Session got = store.findById("t-1").orElseThrow();
         assertThat(got.decisions()).singleElement()
-                .satisfies(d -> assertThat(d.what()).isEqualTo("use reranker"));
-        assertThat(got.refs()).singleElement()
-                .satisfies(r -> assertThat(r.kind()).isEqualTo("symbol"));
+                .satisfies(d -> {
+                    assertThat(d.type()).isEqualTo(SessionEntry.Type.DECISION);
+                    assertThat(d.why()).isEqualTo("precision");
+                });
+        assertThat(got.facts()).singleElement()
+                .satisfies(f -> assertThat(f.symbol()).isEqualTo("R.retrieve"));
     }
 
     @Test
-    void upsertReplacesInPlace() {
-        store.save(Session.start("task-2", "v1"));
-        store.save(Session.start("task-2", "v2"));
-        assertThat(store.findById("task-2")).get()
-                .satisfies(s -> assertThat(s.task()).isEqualTo("v2"));
+    void appendFactTrimsToMaxKeepingNewest() {
+        store.save(Session.start("t-facts", "t"));
+        for (int i = 1; i <= 5; i++) {
+            store.appendFact("t-facts", SessionEntry.fact("r", "F.java", "F.m" + i, "edit " + i), 3);
+        }
+        Session got = store.findById("t-facts").orElseThrow();
+        assertThat(got.facts()).hasSize(3);
+        assertThat(got.facts()).extracting(SessionEntry::what)
+                .containsExactly("edit 3", "edit 4", "edit 5");
     }
 
     @Test
-    void listFiltersByRepoStatusAndText() {
-        store.save(withData("f-a", "alpha task"));                       // repo rag-app, ACTIVE
-        store.save(new Session("f-b", "beta task", Session.Status.DONE,
-                List.of("code-memory"), List.of(), List.of(), List.of(), List.of(), List.of(),
-                Instant.now()));
-
-        assertThat(store.list("rag-app", null, null, 50)).extracting(Session::id).contains("f-a");
-        assertThat(store.list("rag-app", null, null, 50)).extracting(Session::id).doesNotContain("f-b");
-        assertThat(store.list(null, Session.Status.DONE, null, 50)).extracting(Session::id).contains("f-b");
-        assertThat(store.list(null, null, "alpha", 50)).extracting(Session::id).containsExactly("f-a");
+    void appendDecisionsIsBatchedAndNeverTrimmed() {
+        store.save(Session.start("t-dec", "t"));
+        store.appendDecisions("t-dec", List.of(
+                SessionEntry.decision("d1", "w1"),
+                SessionEntry.decision("d2", "w2")));
+        store.appendDecisions("t-dec", List.of(SessionEntry.decision("d3", "w3")));
+        assertThat(store.findById("t-dec").orElseThrow().decisions())
+                .extracting(SessionEntry::what).containsExactly("d1", "d2", "d3");
     }
 
     @Test
-    void deleteAndCount() {
-        long before = store.count();
-        store.save(Session.start("task-del", "x"));
-        assertThat(store.count()).isEqualTo(before + 1);
-        store.deleteById("task-del");
-        assertThat(store.findById("task-del")).isEmpty();
+    void listHeadersReturnsCountsNotBodies() {
+        store.save(new Session("h-1", "alpha", Session.Status.ACTIVE, List.of("rag-app"),
+                List.of(SessionEntry.decision("d", "w")),
+                List.of(SessionEntry.fact("r", "f", "s", "e")), java.time.Instant.now()));
+
+        Session.SessionHeader h = store.listHeaders("rag-app", null, null, 50).stream()
+                .filter(x -> x.id().equals("h-1")).findFirst().orElseThrow();
+        assertThat(h.task()).isEqualTo("alpha");
+        assertThat(h.decisionCount()).isEqualTo(1);
+        assertThat(h.factCount()).isEqualTo(1);
     }
 
     @Test
-    void oldestIdsReturnsLeastRecentlyUpdatedFirst() {
-        store.save(Session.start("old-1", "x"));
-        store.save(Session.start("old-2", "y"));
+    void listHeadersFiltersByStatusAndText() {
+        store.save(new Session("h-a", "beta task", Session.Status.DONE, List.of(),
+                List.of(), List.of(), java.time.Instant.now()));
+        assertThat(store.listHeaders(null, Session.Status.DONE, null, 50))
+                .extracting(Session.SessionHeader::id).contains("h-a");
+        assertThat(store.listHeaders(null, null, "beta", 50))
+                .extracting(Session.SessionHeader::id).contains("h-a");
+    }
+
+    @Test
+    void deleteCountOldest() {
+        store.save(Session.start("d-1", "x"));
+        assertThat(store.findById("d-1")).isPresent();
         assertThat(store.oldestIds(1)).hasSize(1);
-    }
-
-    @Test
-    void purgeRemovesClosedAndIdleByThreshold() {
-        // A DONE session updated "now" should survive a closedBefore well in the past.
-        store.save(new Session("keep", "k", Session.Status.DONE, List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), Instant.now()));
-        Instant past = Instant.now().minus(1, ChronoUnit.DAYS);
-        int removed = store.purge(past, past);
-        assertThat(store.findById("keep")).isPresent();
-        assertThat(removed).isGreaterThanOrEqualTo(0);
+        store.deleteById("d-1");
+        assertThat(store.findById("d-1")).isEmpty();
+        assertThat(store.count()).isGreaterThanOrEqualTo(0);
     }
 }

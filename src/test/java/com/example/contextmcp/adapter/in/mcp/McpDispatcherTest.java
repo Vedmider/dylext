@@ -208,22 +208,85 @@ class McpDispatcherTest {
     }
 
     @Test
-    void callSessionAppendMapsChangeAndRef() throws Exception {
-        var s = com.example.contextmcp.domain.model.Session.start("s-2", "t");
-        when(session.append(org.mockito.ArgumentMatchers.eq("s-2"), org.mockito.ArgumentMatchers.any()))
-                .thenReturn(s);
+    void callSessionFactStreamsFact() throws Exception {
         JsonNode r = handle("""
                 {"jsonrpc":"2.0","id":31,"method":"tools/call",
-                 "params":{"name":"session_append","arguments":{"id":"s-2",
-                   "change":{"repo":"r","file":"F.java","symbol":"F.m","what":"did","why":"g"},
-                   "ref":{"kind":"symbol","value":"r:F.java:F.m"}}}}""");
-        assertThat(r.path("result").path("content").get(0).path("json").path("id").asText())
-                .isEqualTo("s-2");
+                 "params":{"name":"session_fact","arguments":{"id":"s-2",
+                   "repo":"r","file":"F.java","symbol":"F.m","what":"did"}}}""");
+        assertThat(r.path("result").path("content").get(0).path("json").path("ok").asBoolean()).isTrue();
         var cap = org.mockito.ArgumentCaptor.forClass(
-                com.example.contextmcp.domain.port.in.SessionUseCase.Append.class);
-        verify(session).append(org.mockito.ArgumentMatchers.eq("s-2"), cap.capture());
-        assertThat(cap.getValue().change().symbol()).isEqualTo("F.m");
-        assertThat(cap.getValue().ref().kind()).isEqualTo("symbol");
+                com.example.contextmcp.domain.model.SessionEntry.class);
+        verify(session).recordFact(org.mockito.ArgumentMatchers.eq("s-2"), cap.capture());
+        assertThat(cap.getValue().type())
+                .isEqualTo(com.example.contextmcp.domain.model.SessionEntry.Type.FACT);
+        assertThat(cap.getValue().symbol()).isEqualTo("F.m");
+    }
+
+    @Test
+    void callSessionCommitBatchesDecisionsAndReturnsHeader() throws Exception {
+        var s = com.example.contextmcp.domain.model.Session.start("s-3", "t");
+        when(session.commit(org.mockito.ArgumentMatchers.eq("s-3"), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(s);
+        JsonNode r = handle("""
+                {"jsonrpc":"2.0","id":34,"method":"tools/call",
+                 "params":{"name":"session_commit","arguments":{"id":"s-3",
+                   "entries":[{"type":"decision","what":"use reranker","why":"precision"},
+                              {"type":"next","what":"wire it in"}]}}}""");
+        assertThat(r.path("result").path("content").get(0).path("json").path("id").asText())
+                .isEqualTo("s-3");
+        @SuppressWarnings("unchecked")
+        var cap = (org.mockito.ArgumentCaptor<java.util.List<
+                com.example.contextmcp.domain.model.SessionEntry>>) (org.mockito.ArgumentCaptor<?>)
+                org.mockito.ArgumentCaptor.forClass(java.util.List.class);
+        verify(session).commit(org.mockito.ArgumentMatchers.eq("s-3"), cap.capture());
+        assertThat(cap.getValue()).hasSize(2);
+        assertThat(cap.getValue().get(0).why()).isEqualTo("precision");
+        assertThat(cap.getValue().get(1).type())
+                .isEqualTo(com.example.contextmcp.domain.model.SessionEntry.Type.NEXT);
+    }
+
+    @Test
+    void callSessionRecallDefaultTrimsFactsButKeepsAllDecisions() throws Exception {
+        var decisions = new java.util.ArrayList<com.example.contextmcp.domain.model.SessionEntry>();
+        for (int i = 0; i < 5; i++) {
+            decisions.add(com.example.contextmcp.domain.model.SessionEntry.decision("d" + i, "w"));
+        }
+        var facts = new java.util.ArrayList<com.example.contextmcp.domain.model.SessionEntry>();
+        for (int i = 0; i < 40; i++) {
+            facts.add(com.example.contextmcp.domain.model.SessionEntry.fact("r", "f", "s" + i, "e" + i));
+        }
+        var full = new com.example.contextmcp.domain.model.Session("s-4", "t",
+                com.example.contextmcp.domain.model.Session.Status.ACTIVE, java.util.List.of(),
+                decisions, facts, java.time.Instant.now());
+        when(session.recall("s-4")).thenReturn(java.util.Optional.of(full));
+
+        JsonNode def = handle("""
+                {"jsonrpc":"2.0","id":35,"method":"tools/call",
+                 "params":{"name":"session_recall","arguments":{"id":"s-4"}}}""");
+        JsonNode body = def.path("result").path("content").get(0).path("json");
+        assertThat(body.path("decisions")).hasSize(5);
+        assertThat(body.path("facts")).hasSize(20);
+
+        JsonNode fullR = handle("""
+                {"jsonrpc":"2.0","id":36,"method":"tools/call",
+                 "params":{"name":"session_recall","arguments":{"id":"s-4","full":true}}}""");
+        assertThat(fullR.path("result").path("content").get(0).path("json").path("facts")).hasSize(40);
+    }
+
+    @Test
+    void callSessionRecallSectionsPicksLayer() throws Exception {
+        var full = new com.example.contextmcp.domain.model.Session("s-5", "t",
+                com.example.contextmcp.domain.model.Session.Status.ACTIVE, java.util.List.of(),
+                java.util.List.of(com.example.contextmcp.domain.model.SessionEntry.decision("d", "w")),
+                java.util.List.of(com.example.contextmcp.domain.model.SessionEntry.fact("r", "f", "s", "e")),
+                java.time.Instant.now());
+        when(session.recall("s-5")).thenReturn(java.util.Optional.of(full));
+        JsonNode r = handle("""
+                {"jsonrpc":"2.0","id":37,"method":"tools/call",
+                 "params":{"name":"session_recall","arguments":{"id":"s-5","sections":["decisions"]}}}""");
+        JsonNode body = r.path("result").path("content").get(0).path("json");
+        assertThat(body.path("decisions")).hasSize(1);
+        assertThat(body.path("facts")).isEmpty();
     }
 
     @Test
@@ -240,8 +303,8 @@ class McpDispatcherTest {
         JsonNode r = handle("""
                 {"jsonrpc":"2.0","id":33,"method":"tools/list"}""");
         java.util.List<String> names = r.path("result").path("tools").findValuesAsText("name");
-        assertThat(names).contains("session_start", "session_recall", "session_append",
-                "session_list", "session_close");
+        assertThat(names).contains("session_start", "session_fact", "session_commit",
+                "session_recall", "session_list", "session_close", "session_purge");
     }
 
     @Test

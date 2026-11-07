@@ -1,6 +1,7 @@
 package com.example.contextmcp.adapter.out.store;
 
 import com.example.contextmcp.domain.model.Session;
+import com.example.contextmcp.domain.model.SessionEntry;
 import com.example.contextmcp.domain.port.out.SessionStore;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,15 +9,16 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
-import java.sql.Timestamp;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
-/** Postgres/JSONB session store. List fields are serialized as JSONB; retrieval is by exact id or filter. */
+/** Postgres/JSONB session store: two entry layers (decisions durable, facts bounded), keyed by id. */
 @Repository
 public class PgSessionStore implements SessionStore {
+
+    private static final TypeReference<List<SessionEntry>> ENTRIES = new TypeReference<>() { };
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
@@ -28,28 +30,51 @@ public class PgSessionStore implements SessionStore {
     @Override
     public void save(Session s) {
         jdbc.update("""
-                INSERT INTO session (id, task, status, repos, decisions, changes, findings,
-                                     open_threads, refs, updated_at)
-                VALUES (?,?,?,?::jsonb,?::jsonb,?::jsonb,?::jsonb,?::jsonb,?::jsonb, now())
+                INSERT INTO session (id, task, status, repos, decisions, facts, updated_at)
+                VALUES (?,?,?,?::jsonb,?::jsonb,?::jsonb, now())
                 ON CONFLICT (id) DO UPDATE SET
                     task=EXCLUDED.task, status=EXCLUDED.status, repos=EXCLUDED.repos,
-                    decisions=EXCLUDED.decisions, changes=EXCLUDED.changes, findings=EXCLUDED.findings,
-                    open_threads=EXCLUDED.open_threads, refs=EXCLUDED.refs, updated_at=now()
+                    decisions=EXCLUDED.decisions, facts=EXCLUDED.facts, updated_at=now()
                 """,
                 s.id(), s.task(), s.status().name(),
-                w(s.repos()), w(s.decisions()), w(s.changes()), w(s.findings()),
-                w(s.openThreads()), w(s.refs()));
+                w(s.repos()), w(s.decisions()), w(s.facts()));
+    }
+
+    @Override
+    public void appendFact(String id, SessionEntry fact, int maxFacts) {
+        Session s = load(id);
+        List<SessionEntry> facts = new ArrayList<>(s.facts());
+        facts.add(fact);
+        int n = facts.size();
+        int keep = Math.max(maxFacts, 1);
+        if (n > keep) {
+            facts = new ArrayList<>(facts.subList(n - keep, n));
+        }
+        save(new Session(s.id(), s.task(), s.status(), s.repos(), s.decisions(), facts, s.updatedAt()));
+    }
+
+    @Override
+    public void appendDecisions(String id, List<SessionEntry> entries) {
+        Session s = load(id);
+        List<SessionEntry> decisions = new ArrayList<>(s.decisions());
+        decisions.addAll(entries);
+        save(new Session(s.id(), s.task(), s.status(), s.repos(), decisions, s.facts(), s.updatedAt()));
     }
 
     @Override
     public Optional<Session> findById(String id) {
-        return jdbc.query("SELECT * FROM session WHERE id=?", MAPPER, id).stream().findFirst();
+        return jdbc.query("SELECT * FROM session WHERE id=?", FULL, id).stream().findFirst();
     }
 
     @Override
-    public List<Session> list(String repoFilter, Session.Status statusFilter, String textFilter,
-                              int limit) {
-        StringBuilder sql = new StringBuilder("SELECT * FROM session WHERE 1=1");
+    public List<Session.SessionHeader> listHeaders(String repoFilter, Session.Status statusFilter,
+                                                   String textFilter, int limit) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT id, task, status, repos,
+                       jsonb_array_length(decisions) AS dcount,
+                       jsonb_array_length(facts)     AS fcount,
+                       updated_at
+                FROM session WHERE 1=1""");
         List<Object> args = new ArrayList<>();
         if (repoFilter != null && !repoFilter.isBlank()) {
             sql.append(" AND repos @> ?::jsonb");
@@ -65,7 +90,7 @@ public class PgSessionStore implements SessionStore {
         }
         sql.append(" ORDER BY updated_at DESC LIMIT ?");
         args.add(limit <= 0 ? 50 : limit);
-        return jdbc.query(sql.toString(), MAPPER, args.toArray());
+        return jdbc.query(sql.toString(), HEADER, args.toArray());
     }
 
     @Override
@@ -80,18 +105,22 @@ public class PgSessionStore implements SessionStore {
     }
 
     @Override
-    public int purge(Instant closedBefore, Instant idleBefore) {
+    public int purge(java.time.Instant closedBefore, java.time.Instant idleBefore) {
         return jdbc.update("""
                 DELETE FROM session
                 WHERE (status='DONE' AND updated_at < ?)
                    OR (status='ACTIVE' AND updated_at < ?)
-                """, Timestamp.from(closedBefore), Timestamp.from(idleBefore));
+                """, java.sql.Timestamp.from(closedBefore), java.sql.Timestamp.from(idleBefore));
     }
 
     @Override
     public List<String> oldestIds(int n) {
         return jdbc.queryForList(
                 "SELECT id FROM session ORDER BY updated_at ASC LIMIT ?", String.class, Math.max(n, 0));
+    }
+
+    private Session load(String id) {
+        return findById(id).orElseThrow(() -> new NoSuchElementException("unknown session: " + id));
     }
 
     private String w(Object value) {
@@ -102,23 +131,36 @@ public class PgSessionStore implements SessionStore {
         }
     }
 
-    private <T> List<T> r(String jsonText, TypeReference<List<T>> type) {
+    private List<SessionEntry> entries(String jsonText) {
         try {
-            return jsonText == null ? List.of() : json.readValue(jsonText, type);
+            return jsonText == null ? List.of() : json.readValue(jsonText, ENTRIES);
         } catch (Exception e) {
             throw new IllegalStateException("reading session json", e);
         }
     }
 
-    private final RowMapper<Session> MAPPER = (rs, i) -> new Session(
-            rs.getString("id"),
-            rs.getString("task"),
+    @SuppressWarnings("unchecked")
+    private List<String> repos(String jsonText) {
+        try {
+            return jsonText == null ? List.of()
+                    : json.readValue(jsonText, new TypeReference<List<String>>() { });
+        } catch (Exception e) {
+            throw new IllegalStateException("reading repos json", e);
+        }
+    }
+
+    private final RowMapper<Session> FULL = (rs, i) -> new Session(
+            rs.getString("id"), rs.getString("task"),
             Session.Status.valueOf(rs.getString("status")),
-            r(rs.getString("repos"), new TypeReference<>() { }),
-            r(rs.getString("decisions"), new TypeReference<List<Session.Entry>>() { }),
-            r(rs.getString("changes"), new TypeReference<List<Session.Change>>() { }),
-            r(rs.getString("findings"), new TypeReference<List<Session.Entry>>() { }),
-            r(rs.getString("open_threads"), new TypeReference<List<Session.Entry>>() { }),
-            r(rs.getString("refs"), new TypeReference<List<Session.Ref>>() { }),
+            repos(rs.getString("repos")),
+            entries(rs.getString("decisions")),
+            entries(rs.getString("facts")),
+            rs.getTimestamp("updated_at").toInstant());
+
+    private final RowMapper<Session.SessionHeader> HEADER = (rs, i) -> new Session.SessionHeader(
+            rs.getString("id"), rs.getString("task"),
+            Session.Status.valueOf(rs.getString("status")),
+            repos(rs.getString("repos")),
+            rs.getInt("dcount"), rs.getInt("fcount"),
             rs.getTimestamp("updated_at").toInstant());
 }

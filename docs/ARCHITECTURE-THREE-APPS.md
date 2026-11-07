@@ -187,12 +187,15 @@ analyze-once result the AI generates and ingests under `explain:<repo>:...`). Th
 ## 10. Session memory (AI task reflection)
 
 The AI's working memory for a **task** is a session, kept in **context-mcp** in an isolated store
-(own table/port/tools, never mixed with code context). A session spans the whole task — code
-`changes[]`, doc `findings[]`, `decisions[]`, `openThreads[]`, and `refs[]` pointing at docs/symbols
-— keyed by task id and retrieved by exact id like a database record. Tools: `session_start`,
-`session_recall`, `session_append`, `session_list`, `session_close` (+ `session_purge`/TTL for
-cleanup). This gives the "keep in mind what I changed, where, and why; resume where I left off"
-behaviour. See `context-mcp/docs/SKILL.md` → "Session memory".
+(own table/port/tools, never mixed with code context). A session has two layers: a durable
+`decisions[]` log (typed decision/finding/next, each with a `why`, batched at checkpoints and never
+auto-evicted) and a cheap `facts[]` stream (mechanical edit-facts, a bounded ring buffer) — keyed by
+task id and retrieved by exact id like a database record. Write verbs: `session_fact` (stream one
+fact) and `session_commit` (batch decisions). Reads are tiered: `session_list` returns headers only
+(counts, no bodies) and `session_recall` returns all decisions + newest facts by default (`full`/
+`sections` opt-in). Plus `session_start`, `session_close`, and `session_purge`/TTL for cleanup. This
+gives the "keep in mind what I changed, where, and **why**; resume where I left off" behaviour while
+keeping the reloaded record small. See `context-mcp/docs/SKILL.md` → "Session memory".
 
 ## See also
 

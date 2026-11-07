@@ -1,6 +1,7 @@
 package com.example.contextmcp.domain.port.out;
 
 import com.example.contextmcp.domain.model.Session;
+import com.example.contextmcp.domain.model.SessionEntry;
 
 import java.time.Instant;
 import java.util.List;
@@ -11,18 +12,23 @@ public interface SessionStore {
 
     void save(Session session);
 
+    /** Append one streaming fact, trimming the facts list to the newest {@code maxFacts}. */
+    void appendFact(String id, SessionEntry fact, int maxFacts);
+
+    /** Append a batch of durable decision-layer entries (never trimmed). */
+    void appendDecisions(String id, List<SessionEntry> entries);
+
     Optional<Session> findById(String id);
 
-    /** Sessions filtered by optional repo (tag), status, and free-text over task — newest first. */
-    List<Session> list(String repoFilter, Session.Status statusFilter, String textFilter, int limit);
+    /** Cheap index: identity + counts only (no entry bodies), newest first. */
+    List<Session.SessionHeader> listHeaders(String repoFilter, Session.Status statusFilter,
+                                            String textFilter, int limit);
 
     void deleteById(String id);
 
     long count();
 
-    /** Evict sessions matching the lifecycle rule; returns rows removed. */
     int purge(Instant closedBefore, Instant idleBefore);
 
-    /** Oldest session ids (by updatedAt asc) — used for max-rows back-pressure. */
     List<String> oldestIds(int n);
 }

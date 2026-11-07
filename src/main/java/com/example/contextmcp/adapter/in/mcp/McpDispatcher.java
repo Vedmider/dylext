@@ -93,9 +93,16 @@ public class McpDispatcher {
         tools.add(tool("explain", "Concept/doc answer via rag-app (what/why/which/convention). Use for NL intent.", "query"));
         tools.add(tool("recall", "Fuzzy graph-ranked code recall via code-memory (where-is, name unknown).", "query"));
         tools.add(tool("session_start", "Start a task-reflection session; returns its id.", "task"));
-        tools.add(tool("session_recall", "Load a session by id (resume a task).", "id"));
-        tools.add(tool("session_append", "Add a decision/finding/openThread/change/ref/repo to a session.", "id"));
-        tools.add(tool("session_list", "List sessions (filter by repo/status/text).")); // no required args
+        tools.add(tool("session_fact",
+                "Stream ONE cheap factual edit (what changed: repo/file/symbol). Bounded ring buffer. Mechanical, no why.",
+                "id", "what"));
+        tools.add(tool("session_commit",
+                "Batch durable decision-layer entries at a checkpoint: entries[]{type(decision|finding|next),what,why}. Never evicted. NOT per message.",
+                "id", "entries"));
+        tools.add(tool("session_recall",
+                "Load a session by id. Default: all decisions + newest facts only. full=true for everything; sections=[decisions|facts] to pick layers.",
+                "id"));
+        tools.add(tool("session_list", "List session headers (id/task/status/counts) — filter by repo/status/text. No bodies.")); // no required args
         tools.add(tool("session_close", "Mark a session done.", "id"));
         tools.add(tool("session_purge", "Evict expired sessions (TTL sweep)."));  // no required args
         tools.add(tool("ledger", "Running token-savings totals.")); // no required args
@@ -124,12 +131,16 @@ public class McpDispatcher {
                     args.path("roles").asText(null), clampTopK(args, 3));
             case "recall" -> federated.recall(req(args, "query"), clampTopK(args, 5));
             case "session_start" -> session.start(req(args, "task"));
-            case "session_recall" -> session.recall(req(args, "id")).orElse(null);
+            case "session_fact" -> {
+                session.recordFact(req(args, "id"), parseFact(args));
+                yield java.util.Map.of("ok", true);
+            }
+            case "session_commit" -> session.commit(req(args, "id"), parseEntries(args)).header();
+            case "session_recall" -> recallView(session.recall(req(args, "id")).orElse(null), args);
             case "session_list" -> session.list(args.path("repo").asText(null),
                     parseStatus(args.path("status").asText(null)),
                     args.path("text").asText(null), clampTopK(args, 50));
             case "session_close" -> session.close(req(args, "id"));
-            case "session_append" -> session.append(req(args, "id"), parseAppend(args));
             case "session_purge" -> java.util.Map.of("purged", session.purge());
             case "ledger" -> ledger.totals();
             default -> throw new IllegalArgumentException("unknown tool: " + name);
@@ -159,6 +170,7 @@ public class McpDispatcher {
     }
 
     private static final int MAX_FANOUT = 50;
+    private static final int RECALL_FACTS_DEFAULT = 20;
 
     private com.example.contextmcp.domain.model.Session.Status parseStatus(String s) {
         if (s == null || s.isBlank()) {
@@ -167,36 +179,73 @@ public class McpDispatcher {
         return com.example.contextmcp.domain.model.Session.Status.valueOf(s.toUpperCase());
     }
 
-    private com.example.contextmcp.domain.port.in.SessionUseCase.Append parseAppend(JsonNode args) {
-        return new com.example.contextmcp.domain.port.in.SessionUseCase.Append(
-                entry(args.get("decision")),
-                entry(args.get("finding")),
-                entry(args.get("openThread")),
-                change(args.get("change")),
-                ref(args.get("ref")),
-                args.path("repo").asText(null));
+    private com.example.contextmcp.domain.model.SessionEntry parseFact(JsonNode args) {
+        return com.example.contextmcp.domain.model.SessionEntry.fact(
+                args.path("repo").asText(null), args.path("file").asText(null),
+                args.path("symbol").asText(null), req(args, "what"));
     }
 
-    private static com.example.contextmcp.domain.model.Session.Entry entry(JsonNode n) {
-        return n == null || n.isNull() ? null
-                : new com.example.contextmcp.domain.model.Session.Entry(
-                        n.path("what").asText(""), n.path("why").asText(""));
+    private java.util.List<com.example.contextmcp.domain.model.SessionEntry> parseEntries(JsonNode args) {
+        JsonNode arr = args.get("entries");
+        if (arr == null || !arr.isArray() || arr.isEmpty()) {
+            throw new IllegalArgumentException("missing required argument: entries (non-empty array)");
+        }
+        java.util.List<com.example.contextmcp.domain.model.SessionEntry> out = new java.util.ArrayList<>();
+        for (JsonNode n : arr) {
+            out.add(decisionEntry(n));
+        }
+        return out;
     }
 
-    private static com.example.contextmcp.domain.model.Session.Change change(JsonNode n) {
-        return n == null || n.isNull() ? null
-                : new com.example.contextmcp.domain.model.Session.Change(
-                        n.path("repo").asText(null), n.path("file").asText(null),
-                        n.path("symbol").asText(null), n.path("what").asText(""),
-                        n.path("why").asText(""));
+    private static com.example.contextmcp.domain.model.SessionEntry decisionEntry(JsonNode n) {
+        String what = n.path("what").asText("");
+        if (what.isBlank()) {
+            throw new IllegalArgumentException("each committed entry requires 'what'");
+        }
+        com.example.contextmcp.domain.model.SessionEntry.Type type =
+                parseType(n.path("type").asText(null));
+        return new com.example.contextmcp.domain.model.SessionEntry(
+                type, what, n.path("why").asText(null),
+                n.path("repo").asText(null), n.path("file").asText(null),
+                n.path("symbol").asText(null), null);
     }
 
-    private static com.example.contextmcp.domain.model.Session.Ref ref(JsonNode n) {
-        return n == null || n.isNull() ? null
-                : new com.example.contextmcp.domain.model.Session.Ref(
-                        n.path("kind").asText(""), n.path("value").asText(""));
+    private static com.example.contextmcp.domain.model.SessionEntry.Type parseType(String s) {
+        if (s == null || s.isBlank()) {
+            return com.example.contextmcp.domain.model.SessionEntry.Type.DECISION;
+        }
+        return com.example.contextmcp.domain.model.SessionEntry.Type.valueOf(s.toUpperCase());
     }
 
+    /** Tiered read: default = all decisions + newest facts; full=true = everything; sections picks layers. */
+    private Object recallView(com.example.contextmcp.domain.model.Session s, JsonNode args) {
+        if (s == null) {
+            return null;
+        }
+        boolean full = args.path("full").asBoolean(false);
+        java.util.Set<String> sections = new java.util.HashSet<>();
+        JsonNode sectionsNode = args.get("sections");
+        if (sectionsNode != null && sectionsNode.isArray()) {
+            sectionsNode.forEach(x -> sections.add(x.asText("").toLowerCase()));
+        }
+        boolean wantDecisions = sections.isEmpty() || sections.contains("decisions");
+        boolean wantFacts = sections.isEmpty() || sections.contains("facts");
+
+        java.util.List<com.example.contextmcp.domain.model.SessionEntry> decisions =
+                wantDecisions ? s.decisions() : java.util.List.of();
+        java.util.List<com.example.contextmcp.domain.model.SessionEntry> facts;
+        if (!wantFacts) {
+            facts = java.util.List.of();
+        } else if (full) {
+            facts = s.facts();
+        } else {
+            int n = s.facts().size();
+            facts = n <= RECALL_FACTS_DEFAULT ? s.facts()
+                    : s.facts().subList(n - RECALL_FACTS_DEFAULT, n);
+        }
+        return new com.example.contextmcp.domain.model.Session(
+                s.id(), s.task(), s.status(), s.repos(), decisions, facts, s.updatedAt());
+    }
 
     private static int clampTopK(JsonNode args, int fallback) {
         return clamp(args.path("topK").asInt(fallback), fallback);
