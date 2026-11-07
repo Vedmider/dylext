@@ -23,27 +23,33 @@ public class ContextService implements RetrieveUseCase {
     private final DigestStore store;
     private final com.example.contextmcp.domain.port.in.LedgerUseCase ledger;
     private final SummaryService summaries;
+    private final FreshnessGate freshness;
 
     public ContextService(DigestStore store,
                           com.example.contextmcp.domain.port.in.LedgerUseCase ledger,
-                          SummaryService summaries) {
+                          SummaryService summaries,
+                          FreshnessGate freshness) {
         this.store = store;
         this.ledger = ledger;
         this.summaries = summaries;
+        this.freshness = freshness;
     }
 
     @Override
     public List<SymbolDigest> outline(String repo, String filePath) {
+        freshness.ensureFresh(repo);
         return store.symbolsInFile(repo, filePath).stream().map(ContextService::toDigest).toList();
     }
 
     @Override
     public List<SymbolDigest> searchSymbols(String repo, String query, int topK) {
+        freshness.ensureFresh(repo);
         return store.searchSymbols(repo, query, topK).stream().map(ContextService::toDigest).toList();
     }
 
     @Override
     public Digest getDigest(String symbolId) {
+        freshness.ensureFresh(repoOf(symbolId));
         Symbol symbol = store.findSymbol(symbolId)
                 .orElseThrow(() -> new NoSuchElementException("unknown symbol: " + symbolId));
         Skeleton skeleton = store.findSkeleton(symbolId)
@@ -56,6 +62,7 @@ public class ContextService implements RetrieveUseCase {
 
     @Override
     public ExpandedSpan expand(String symbolId) {
+        freshness.ensureFresh(repoOf(symbolId));
         Symbol s = store.findSymbol(symbolId)
                 .orElseThrow(() -> new NoSuchElementException("unknown symbol: " + symbolId));
         String root = store.repoRoot(s.repo())
@@ -64,6 +71,12 @@ public class ContextService implements RetrieveUseCase {
         String span = readSpan(file, s.startLine(), s.endLine());
         ledger.recordServed(null, "expand", span, readWhole(file));
         return new ExpandedSpan(symbolId, s.filePath(), s.startLine(), s.endLine(), span);
+    }
+
+    /** Symbol ids are {@code repo:filePath:symbolPath}; the repo is the first segment. */
+    private static String repoOf(String symbolId) {
+        int i = symbolId == null ? -1 : symbolId.indexOf(':');
+        return i > 0 ? symbolId.substring(0, i) : null;
     }
 
     private String wholeFileOf(Symbol symbol) {

@@ -16,19 +16,23 @@ public class DynamicContextService implements DynamicContextUseCase {
 
     private final DigestStore store;
     private final VcsClient vcs;
+    private final FreshnessGate freshness;
 
-    public DynamicContextService(DigestStore store, VcsClient vcs) {
+    public DynamicContextService(DigestStore store, VcsClient vcs, FreshnessGate freshness) {
         this.store = store;
         this.vcs = vcs;
+        this.freshness = freshness;
     }
 
     @Override
     public List<Commit> recentChanges(String repo, String pathFilter, int limit) {
+        freshness.ensureFresh(repo);
         return vcs.recentCommits(rootOf(repo), pathFilter, limit <= 0 ? 10 : limit);
     }
 
     @Override
     public List<WorkingChange> workingChanges(String repo, String pathFilter) {
+        freshness.ensureFresh(repo);
         return vcs.workingChanges(rootOf(repo), pathFilter);
     }
 

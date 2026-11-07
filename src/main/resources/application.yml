@@ -23,3 +23,5 @@ contextmcp:
   federation:
     rag-url: ${RAG_URL:http://localhost:18080}   # rag-app: conceptual/doc retrieval (explain)
     cm-url: ${CM_URL:http://localhost:8080}       # code-memory: fuzzy graph-ranked code recall (recall)
+  freshness:
+    on-read: ${FRESHNESS_ON_READ:true}            # auto-sync a repo if git HEAD moved before a static read
