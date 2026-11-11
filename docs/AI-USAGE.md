@@ -24,6 +24,16 @@ read bytes only with `expand`.
 | live edits / "what am I changing right now" | `working_changes()` | Dylext |
 | history / "what changed recently" | `recent_changes()` | Dylext |
 | how many tokens am I saving | `ledger()` | Dylext |
+| is the code this answer cites real? | `verify_claims(answer, repo)` | Dylext |
+
+## Ground answers before trusting them (anti-hallucination)
+
+When an answer (from `explain`, an LLM, or a doc) names code symbols — `Type#method`,
+`Class.method`, `someMethod()` — run it through `verify_claims(answer, repo)` before relying on it.
+Each cited symbol comes back **VERIFIED** (it exists, with its real signature + file + line) or
+**UNVERIFIED** (not found in the index — likely hallucinated or stale). The answer is never
+rewritten, only annotated, so you decide what to trust. Use this especially for answers that will
+become handover docs, ADRs, or runbooks.
 
 ## Progressive disclosure (always)
 

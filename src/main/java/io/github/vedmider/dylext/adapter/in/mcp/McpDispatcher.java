@@ -28,12 +28,14 @@ public class McpDispatcher {
     private final io.github.vedmider.dylext.domain.port.in.SyncUseCase sync;
     private final io.github.vedmider.dylext.domain.port.in.FederatedContextUseCase federated;
     private final io.github.vedmider.dylext.domain.port.in.SessionUseCase session;
+    private final io.github.vedmider.dylext.domain.port.in.VerifyUseCase verify;
 
     public McpDispatcher(IndexUseCase index, RetrieveUseCase retrieve, ImpactUseCase impact,
                          DynamicContextUseCase dynamic, LedgerUseCase ledger,
                          io.github.vedmider.dylext.domain.port.in.SyncUseCase sync,
                          io.github.vedmider.dylext.domain.port.in.FederatedContextUseCase federated,
-                         io.github.vedmider.dylext.domain.port.in.SessionUseCase session) {
+                         io.github.vedmider.dylext.domain.port.in.SessionUseCase session,
+                         io.github.vedmider.dylext.domain.port.in.VerifyUseCase verify) {
         this.index = index;
         this.retrieve = retrieve;
         this.impact = impact;
@@ -42,6 +44,7 @@ public class McpDispatcher {
         this.sync = sync;
         this.federated = federated;
         this.session = session;
+        this.verify = verify;
     }
 
     /** @return the JSON-RPC response string, or null for a notification (no id). */
@@ -92,6 +95,9 @@ public class McpDispatcher {
         tools.add(tool("sync", "Refresh a repo's index.", "repo", "root"));
         tools.add(tool("explain", "Concept/doc answer via Sestacon (what/why/which/convention). Use for NL intent.", "query"));
         tools.add(tool("recall", "Fuzzy graph-ranked code recall via code-memory (where-is, name unknown).", "query"));
+        tools.add(tool("verify_claims",
+                "Ground an answer's code references against the symbol index: each cited symbol is marked VERIFIED (with its real signature+location) or UNVERIFIED (not found). Use to catch hallucinated code in an explain/LLM answer.",
+                "answer", "repo"));
         tools.add(tool("session_start", "Start a task-reflection session; returns its id.", "task"));
         tools.add(tool("session_fact",
                 "Stream ONE cheap factual edit (what changed: repo/file/symbol). Bounded ring buffer. Mechanical, no why.",
@@ -130,6 +136,7 @@ public class McpDispatcher {
             case "explain" -> federated.explain(req(args, "query"),
                     args.path("roles").asText(null), clampTopK(args, 3));
             case "recall" -> federated.recall(req(args, "query"), clampTopK(args, 5));
+            case "verify_claims" -> verify.verify(req(args, "answer"), req(args, "repo"));
             case "session_start" -> session.start(req(args, "task"));
             case "session_fact" -> {
                 session.recordFact(req(args, "id"), parseFact(args));

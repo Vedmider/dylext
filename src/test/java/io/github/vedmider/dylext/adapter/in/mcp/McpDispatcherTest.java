@@ -43,11 +43,14 @@ class McpDispatcherTest {
             mock(io.github.vedmider.dylext.domain.port.in.FederatedContextUseCase.class);
     private final io.github.vedmider.dylext.domain.port.in.SessionUseCase session =
             mock(io.github.vedmider.dylext.domain.port.in.SessionUseCase.class);
+    private final io.github.vedmider.dylext.domain.port.in.VerifyUseCase verify =
+            mock(io.github.vedmider.dylext.domain.port.in.VerifyUseCase.class);
     private McpDispatcher dispatcher;
 
     @BeforeEach
     void setup() {
-        dispatcher = new McpDispatcher(index, retrieve, impact, dynamic, ledger, sync, federated, session);
+        dispatcher = new McpDispatcher(index, retrieve, impact, dynamic, ledger, sync, federated,
+                session, verify);
         when(ledger.totals()).thenReturn(new Totals(3, 100, 400));
     }
 
@@ -324,5 +327,29 @@ class McpDispatcherTest {
     void notificationWithoutIdForUnknownMethodYieldsNoResponse() {
         assertThat(dispatcher.handle("""
                 {"jsonrpc":"2.0","method":"does/notExist"}""")).isNull();
+    }
+
+    @Test
+    void verifyClaimsToolReturnsCitations() throws Exception {
+        var citation = io.github.vedmider.dylext.domain.model.VerifiedAnswer.Citation.unverified("GhostType");
+        when(verify.verify("answer text", "r")).thenReturn(
+                new io.github.vedmider.dylext.domain.model.VerifiedAnswer(
+                        "answer text", java.util.List.of(citation), 1));
+
+        JsonNode r = handle("""
+                {"jsonrpc":"2.0","id":40,"method":"tools/call",
+                 "params":{"name":"verify_claims","arguments":{"answer":"answer text","repo":"r"}}}""");
+
+        JsonNode body = r.path("result").path("content").get(0).path("json");
+        assertThat(body.path("unverifiedCount").asInt()).isEqualTo(1);
+        assertThat(body.path("citations").get(0).path("token").asText()).isEqualTo("GhostType");
+        assertThat(body.path("citations").get(0).path("status").asText()).isEqualTo("UNVERIFIED");
+    }
+
+    @Test
+    void verifyClaimsToolIsAdvertised() throws Exception {
+        JsonNode r = handle("""
+                {"jsonrpc":"2.0","id":41,"method":"tools/list"}""");
+        assertThat(r.path("result").path("tools").findValuesAsText("name")).contains("verify_claims");
     }
 }

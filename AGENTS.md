@@ -14,7 +14,10 @@ stop an agent from burning thousands of tokens on `grep` + reading whole files t
 codebase.
 
 It is the **single endpoint**: it also federates `explain` (concept/doc answers) and `recall`
-(fuzzy code recall) so you talk to one server.
+(fuzzy code recall) so you talk to one server. And it can **fact-check** an answer's code
+references with `verify_claims(answer, repo)` — each cited symbol is marked verified (real, with its
+signature/location) or unverified (not in the index), so hallucinated code is caught before you
+trust it.
 
 ## How to wire your AI in
 
