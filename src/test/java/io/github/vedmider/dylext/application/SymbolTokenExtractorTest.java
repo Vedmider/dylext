@@ -55,4 +55,33 @@ class SymbolTokenExtractorTest {
         assertThat(extractor.extract("retrieve() then retrieve() again"))
                 .containsExactly("retrieve");
     }
+
+    @Test
+    void ignoresUrls() {
+        assertThat(extractor.extract("see https://example.com/docs/Guide for details"))
+                .doesNotContain("https", "example", "Guide");
+    }
+
+    @Test
+    void ignoresAbbreviations() {
+        assertThat(extractor.extract("use the cache, e.g. for hot reads, i.e. repeated queries"))
+                .isEmpty();
+    }
+
+    @Test
+    void extractorItselfDoesNotCap() {
+        // The 50-token cap lives in the service, not the extractor — the extractor returns all
+        // candidates it finds. (Service-level capping is pinned in CitationVerifierServiceTest.)
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 80; i++) {
+            sb.append("Type").append(i).append("#method").append(i).append(" ");
+        }
+        assertThat(extractor.extract(sb.toString())).hasSizeGreaterThan(100);
+    }
+
+    @Test
+    void sentenceLeadingCapitalizedWordIsNotFlagged() {
+        assertThat(extractor.extract("System design matters. Kafka is a log."))
+                .doesNotContain("System", "Kafka", "design");
+    }
 }

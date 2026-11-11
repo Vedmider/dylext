@@ -59,4 +59,37 @@ class McpEndToEndIT {
                 {"jsonrpc":"2.0","id":2,"method":"tools/list"}"""));
         assertThat(r.path("result").path("tools")).isNotEmpty();
     }
+
+    @Test
+    void verifyClaimsGroundsRealAndFakeSymbolsThroughMcp() throws Exception {
+        call("index", "{\"repo\":\"vfe2e\",\"root\":\"src/main/java\"}");
+
+        JsonNode result = call("verify_claims",
+                "{\"answer\":\"the dispatcher calls searchSymbols() and also GhostThing#vanish\","
+                + "\"repo\":\"vfe2e\"}");
+        JsonNode body = result.path("content").get(0).path("json");
+
+        JsonNode citations = body.path("citations");
+        assertThat(citations).isNotEmpty();
+
+        JsonNode verified = find(citations, "searchSymbols");
+        assertThat(verified.path("status").asText()).isEqualTo("VERIFIED");
+        assertThat(verified.path("signature").asText()).isNotBlank();
+        assertThat(verified.path("startLine").asInt()).isPositive();
+        // no raw source body leaks — only signature/location are surfaced
+        assertThat(verified.has("source")).isFalse();
+
+        JsonNode fake = find(citations, "vanish");
+        assertThat(fake.path("status").asText()).isEqualTo("UNVERIFIED");
+        assertThat(body.path("unverifiedCount").asInt()).isGreaterThanOrEqualTo(1);
+    }
+
+    private static JsonNode find(JsonNode citations, String token) {
+        for (JsonNode c : citations) {
+            if (token.equals(c.path("token").asText())) {
+                return c;
+            }
+        }
+        throw new AssertionError("no citation for token: " + token);
+    }
 }

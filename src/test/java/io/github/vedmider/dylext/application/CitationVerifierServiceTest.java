@@ -81,4 +81,40 @@ class CitationVerifierServiceTest {
         assertThat(result.citations()).isEmpty();
         assertThat(result.unverifiedCount()).isZero();
     }
+
+    @Test
+    void repeatedCitationIsCountedOnce() {
+        var idx = indexWith(Map.of("retrieve",
+                digest("r:S.java:S#retrieve", "retrieve", "List retrieve()", 10)));
+        var svc = new CitationVerifierService(idx);
+
+        VerifiedAnswer result = svc.verify("retrieve() then retrieve() then retrieve() again", "r");
+
+        assertThat(result.citations()).filteredOn(c -> c.token().equals("retrieve")).hasSize(1);
+    }
+
+    @Test
+    void ambiguousTokenResolvesToFirstMatchingHit() {
+        // searchSymbols returns one record (topK=1); service takes the first name match.
+        var idx = indexWith(Map.of("close",
+                digest("r:A.java:A#close", "close", "void close()", 5)));
+        var svc = new CitationVerifierService(idx);
+
+        VerifiedAnswer result = svc.verify("then it calls close() to release", "r");
+
+        assertThat(result.citations()).filteredOn(c -> c.token().equals("close"))
+                .singleElement()
+                .satisfies(c -> assertThat(c.symbolId()).isEqualTo("r:A.java:A#close"));
+    }
+
+    @Test
+    void capsTokenLookupsOnHugeAnswer() {
+        var svc = new CitationVerifierService(indexWith(Map.of()));
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 200; i++) {
+            sb.append("Type").append(i).append("#method").append(i).append(" ");
+        }
+        VerifiedAnswer result = svc.verify(sb.toString(), "r");
+        assertThat(result.citations()).hasSizeLessThanOrEqualTo(50);
+    }
 }

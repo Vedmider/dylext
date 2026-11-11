@@ -352,4 +352,20 @@ class McpDispatcherTest {
                 {"jsonrpc":"2.0","id":41,"method":"tools/list"}""");
         assertThat(r.path("result").path("tools").findValuesAsText("name")).contains("verify_claims");
     }
+
+    @Test
+    void verifyClaimsMissingRepoIsInvalidParams() throws Exception {
+        JsonNode r = handle("""
+                {"jsonrpc":"2.0","id":42,"method":"tools/call",
+                 "params":{"name":"verify_claims","arguments":{"answer":"x"}}}""");
+        assertThat(r.path("error").path("code").asInt()).isEqualTo(-32602);
+    }
+
+    @Test
+    void verifyClaimsBlankAnswerIsInvalidParams() throws Exception {
+        JsonNode r = handle("""
+                {"jsonrpc":"2.0","id":43,"method":"tools/call",
+                 "params":{"name":"verify_claims","arguments":{"answer":"  ","repo":"r"}}}""");
+        assertThat(r.path("error").path("code").asInt()).isEqualTo(-32602);
+    }
 }

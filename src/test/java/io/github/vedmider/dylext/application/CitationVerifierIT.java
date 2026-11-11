@@ -79,4 +79,26 @@ class CitationVerifierIT {
                 .singleElement()
                 .satisfies(c -> assertThat(c.status()).isEqualTo(Status.UNVERIFIED));
     }
+
+    @Test
+    void symbolIsScopedToItsRepo(@TempDir Path dir) throws IOException {
+        indexFixture(dir);   // indexes repo "ver"
+
+        VerifiedAnswer result = verify.verify("the greeting is produced by Greeter#greet", "other-repo");
+
+        assertThat(result.citations())
+                .filteredOn(c -> c.token().equals("greet"))
+                .allSatisfy(c -> assertThat(c.status()).isEqualTo(Status.UNVERIFIED));
+    }
+
+    @Test
+    void proseOnlyAnswerHasNoCitations(@TempDir Path dir) throws IOException {
+        String repo = indexFixture(dir);
+
+        VerifiedAnswer result = verify.verify(
+                "The greeting is returned to the caller after processing completes.", repo);
+
+        assertThat(result.citations()).isEmpty();
+        assertThat(result.unverifiedCount()).isZero();
+    }
 }
