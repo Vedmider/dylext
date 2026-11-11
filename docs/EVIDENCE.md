@@ -38,3 +38,25 @@ symbols, while digests return just the signatures and `expand` returns just one 
   whole large file read end-to-end will save little — `expand` returns one symbol span, not a file.
 - The summary **build** cost (when a real summarizer is enabled) is recorded to the ledger as a
   cost (`summarize:build`), so net savings stay honest once summarization is turned on.
+
+
+## Parser quality — polyglot fidelity (Tiers 1–2)
+
+Measured via `~/e2e/dylext_metrics.py` (MCP index → sampled symbols → `impact_of`) on real repos,
+before vs after the Tier-1/2 uplift. "Before" = skeleton-level (names + bare signatures); "after" =
+typed signatures + structural kinds + qualified, cross-file-resolvable call edges.
+
+| repo (files) | symbols before → after | kinds | signature completeness | edge resolution* |
+|---|---|---|---|---|
+| Go — `eric-ran-rad-lcm-batchservice` (332) | 4270 → **6222** (+46%) | 2 → **4** (CLASS, FIELD, INTERFACE, METHOD) | 66% of methods carry params + return | 62% of sampled methods have ≥1 resolved caller |
+| Python — `cloudran-test-rce` (181) | 1058 → **3755** (+255%) | **3** (CLASS, FIELD, METHOD) | **100%** typed | 28%* |
+
+\* Edge resolution = fraction of sampled methods for which `impact_of` returns at least one caller
+resolved to a defining symbol **in the same repo**. Python is lower by nature: many calls target
+imported/builtin/dynamic names with no in-repo definition — a true property of the codebase, not a
+parser defect. The symbol-count jumps come from newly captured structural symbols (Go struct
+fields / interface methods / consts; Python module vars / class attributes).
+
+Quality is a measured number, not a claim; re-run the gate after any parser change to catch
+regressions. All parsers conform to `parsers/CONTRACT.md` (shared fixture enforced in each sidecar's
+tests).

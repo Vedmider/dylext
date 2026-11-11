@@ -103,8 +103,16 @@ public class IndexService implements IndexUseCase {
             return List.of();
         }
         return s.callTargets().stream()
+                .map(IndexService::simpleName)      // qualified recv.method / pkg.Func -> method / Func
+                .distinct()
                 .map(target -> io.github.vedmider.dylext.domain.model.CodeEdge.call(repo, s.id(), target))
                 .toList();
+    }
+
+    /** Last segment of a possibly-qualified call target, so edges resolve by simple name across languages. */
+    static String simpleName(String target) {
+        int dot = target.lastIndexOf('.');
+        return dot >= 0 && dot < target.length() - 1 ? target.substring(dot + 1) : target;
     }
 
     private void pruneRemovedSymbols(String repo, String rel, List<Symbol> current) {

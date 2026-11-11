@@ -25,6 +25,11 @@ type symbol struct {
 	StartLine    int      `json:"startLine"`
 	EndLine      int      `json:"endLine"`
 	CallTargets  []string `json:"callTargets"`
+	FqName       string   `json:"fqName,omitempty"`
+	Receiver     string   `json:"receiver,omitempty"`
+	ReturnType   string   `json:"returnType,omitempty"`
+	Modifiers    []string `json:"modifiers,omitempty"`
+	Imports      []string `json:"imports,omitempty"`
 }
 
 type parseRequest struct {
@@ -73,21 +78,44 @@ func funcSignature(fset *token.FileSet, fn *ast.FuncDecl) string {
 		b.WriteString("(" + recv + ") ")
 	}
 	b.WriteString(fn.Name.Name + "(")
-	if fn.Type.Params != nil {
-		var params []string
-		for _, p := range fn.Type.Params.List {
-			n := len(p.Names)
-			if n == 0 {
-				n = 1
-			}
-			for i := 0; i < n; i++ {
-				params = append(params, exprString(p.Type))
-			}
-		}
-		b.WriteString(strings.Join(params, ", "))
-	}
+	b.WriteString(paramList(fn.Type.Params))
 	b.WriteString(")")
+	if ret := resultList(fn.Type.Results); ret != "" {
+		b.WriteString(" " + ret)
+	}
 	return b.String()
+}
+
+func paramList(fields *ast.FieldList) string {
+	if fields == nil {
+		return ""
+	}
+	var params []string
+	for _, p := range fields.List {
+		typ := exprString(p.Type)
+		if len(p.Names) == 0 {
+			params = append(params, typ)
+			continue
+		}
+		for _, n := range p.Names {
+			params = append(params, n.Name+" "+typ)
+		}
+	}
+	return strings.Join(params, ", ")
+}
+
+func resultList(fields *ast.FieldList) string {
+	if fields == nil || len(fields.List) == 0 {
+		return ""
+	}
+	var rs []string
+	for _, r := range fields.List {
+		rs = append(rs, exprString(r.Type))
+	}
+	if len(rs) == 1 && len(fields.List[0].Names) == 0 {
+		return rs[0]
+	}
+	return "(" + strings.Join(rs, ", ") + ")"
 }
 
 func exprString(e ast.Expr) string {
@@ -119,7 +147,11 @@ func callTargets(fn *ast.FuncDecl) []string {
 			case *ast.Ident:
 				name = f.Name
 			case *ast.SelectorExpr:
-				name = f.Sel.Name
+				if base, ok := f.X.(*ast.Ident); ok {
+					name = base.Name + "." + f.Sel.Name // qualified: pkg.Func / recv.Method
+				} else {
+					name = f.Sel.Name
+				}
 			}
 			if name != "" && !seen[name] {
 				seen[name] = true
@@ -134,18 +166,78 @@ func callTargets(fn *ast.FuncDecl) []string {
 	return out
 }
 
+func exported(name string) []string {
+	if name != "" && name[0] >= 'A' && name[0] <= 'Z' {
+		return []string{"exported"}
+	}
+	return []string{}
+}
+
+func structFields(typeName string, st *ast.StructType, fset *token.FileSet) []symbol {
+	var out []symbol
+	if st.Fields == nil {
+		return out
+	}
+	for _, f := range st.Fields.List {
+		typ := exprString(f.Type)
+		for _, n := range f.Names {
+			out = append(out, symbol{
+				Kind: "FIELD", Name: n.Name, SymbolPath: typeName + "." + n.Name,
+				Signature: n.Name + " " + typ, Receiver: typeName, ReturnType: typ,
+				StartLine: fset.Position(n.Pos()).Line, EndLine: fset.Position(n.End()).Line,
+				CallTargets: []string{}, Modifiers: exported(n.Name),
+			})
+		}
+	}
+	return out
+}
+
+func interfaceMethods(typeName string, it *ast.InterfaceType, fset *token.FileSet) []symbol {
+	var out []symbol
+	if it.Methods == nil {
+		return out
+	}
+	for _, m := range it.Methods.List {
+		ft, ok := m.Type.(*ast.FuncType)
+		if !ok || len(m.Names) == 0 {
+			continue
+		}
+		name := m.Names[0].Name
+		sig := name + "(" + paramList(ft.Params) + ")"
+		ret := resultList(ft.Results)
+		if ret != "" {
+			sig += " " + ret
+		}
+		out = append(out, symbol{
+			Kind: "METHOD", Name: name, SymbolPath: typeName + "#" + name,
+			Signature: sig, Receiver: typeName, ReturnType: ret,
+			StartLine: fset.Position(m.Pos()).Line, EndLine: fset.Position(m.End()).Line,
+			CallTargets: []string{}, Modifiers: exported(name),
+		})
+	}
+	return out
+}
+
 func extract(source string) []symbol {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "src.go", source, parser.ParseComments)
 	if err != nil {
 		return nil // let Dylext synthesize the MODULE fallback
 	}
+	pkg := file.Name.Name
+	fq := func(path string) string {
+		if pkg == "" {
+			return path
+		}
+		return pkg + "." + path
+	}
 	out := []symbol{}
 	for _, decl := range file.Decls {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
 			path := d.Name.Name
-			if recv := receiverType(d); recv != "" {
+			recv := receiverType(d)
+			if recv != "" {
 				path = recv + "#" + d.Name.Name
 			}
 			out = append(out, symbol{
@@ -155,32 +247,101 @@ func extract(source string) []symbol {
 				StartLine:    fset.Position(d.Pos()).Line,
 				EndLine:      fset.Position(d.End()).Line,
 				CallTargets:  callTargets(d),
+				FqName:       fq(path), Receiver: recv,
+				ReturnType: resultList(d.Type.Results), Modifiers: exported(d.Name.Name),
 			})
 		case *ast.GenDecl:
-			for _, spec := range d.Specs {
-				ts, ok := spec.(*ast.TypeSpec)
-				if !ok {
+			out = append(out, genDeclSymbols(d, fset, fq)...)
+		}
+	}
+	return out
+}
+
+func genDeclSymbols(d *ast.GenDecl, fset *token.FileSet, fq func(string) string) []symbol {
+	var out []symbol
+	for _, spec := range d.Specs {
+		switch s := spec.(type) {
+		case *ast.TypeSpec:
+			kind := "CLASS"
+			if _, ok := s.Type.(*ast.InterfaceType); ok {
+				kind = "INTERFACE"
+			}
+			out = append(out, symbol{
+				Kind: kind, Name: s.Name.Name, SymbolPath: s.Name.Name,
+				Signature:    "type " + s.Name.Name + " " + typeKeyword(s.Type),
+				DocFirstLine: firstDocLine(d.Doc),
+				StartLine:    fset.Position(s.Pos()).Line,
+				EndLine:      fset.Position(s.End()).Line,
+				CallTargets:  []string{}, FqName: fq(s.Name.Name), Modifiers: exported(s.Name.Name),
+			})
+			if st, ok := s.Type.(*ast.StructType); ok {
+				out = append(out, structFields(s.Name.Name, st, fset)...)
+			}
+			if it, ok := s.Type.(*ast.InterfaceType); ok {
+				out = append(out, interfaceMethods(s.Name.Name, it, fset)...)
+			}
+		case *ast.ValueSpec:
+			mods := []string{}
+			if d.Tok.String() == "const" {
+				mods = append(mods, "const")
+			}
+			for _, n := range s.Names {
+				if n.Name == "_" {
 					continue
 				}
-				kind, keyword := "CLASS", "type"
-				switch ts.Type.(type) {
-				case *ast.InterfaceType:
-					kind = "INTERFACE"
-				case *ast.StructType:
-					kind = "CLASS"
-				}
 				out = append(out, symbol{
-					Kind: kind, Name: ts.Name.Name, SymbolPath: ts.Name.Name,
-					Signature:    keyword + " " + ts.Name.Name + " " + typeKeyword(ts.Type),
+					Kind: "FIELD", Name: n.Name, SymbolPath: n.Name,
+					Signature:    d.Tok.String() + " " + n.Name,
 					DocFirstLine: firstDocLine(d.Doc),
-					StartLine:    fset.Position(ts.Pos()).Line,
-					EndLine:      fset.Position(ts.End()).Line,
-					CallTargets:  []string{},
+					StartLine:    fset.Position(n.Pos()).Line,
+					EndLine:      fset.Position(n.End()).Line,
+					CallTargets:  []string{}, FqName: fq(n.Name),
+					Modifiers: append(exported(n.Name), mods...),
 				})
 			}
 		}
 	}
 	return out
+}
+
+func moduleImports(file *ast.File) []string {
+	out := []string{}
+	for _, imp := range file.Imports {
+		path := strings.Trim(imp.Path.Value, `"`)
+		if imp.Name != nil {
+			out = append(out, imp.Name.Name+" "+path)
+		} else {
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
+func buildSymbols(source, filePath string) []symbol {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "src.go", source, parser.ParseComments)
+	members := extract(source)
+	if err != nil || members == nil {
+		return []symbol{}
+	}
+	name := filePath
+	if i := strings.LastIndex(name, "/"); i >= 0 {
+		name = name[i+1:]
+	}
+	if name == "" {
+		name = "<module>"
+	}
+	end := 1
+	for _, m := range members {
+		if m.EndLine > end {
+			end = m.EndLine
+		}
+	}
+	module := symbol{
+		Kind: "MODULE", Name: name, SymbolPath: "<module>", Signature: name,
+		StartLine: 1, EndLine: end, CallTargets: []string{}, Imports: moduleImports(file),
+	}
+	return append([]symbol{module}, members...)
 }
 
 func typeKeyword(e ast.Expr) string {
@@ -201,10 +362,7 @@ func parseHandler(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(parseResponse{Symbols: []symbol{}, Error: err.Error()})
 		return
 	}
-	syms := extract(req.Source)
-	if syms == nil {
-		syms = []symbol{} // Dylext synthesizes the MODULE fallback
-	}
+	syms := buildSymbols(req.Source, req.FilePath)
 	_ = json.NewEncoder(w).Encode(parseResponse{Symbols: syms})
 }
 

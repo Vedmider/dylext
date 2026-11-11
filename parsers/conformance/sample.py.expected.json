@@ -1,0 +1,16 @@
+{
+  "symbols": [
+    {"kind": "FIELD", "name": "MAX_LEN", "symbolPath": "MAX_LEN", "signature": "MAX_LEN = 10"},
+    {"kind": "CLASS", "name": "Greeter", "symbolPath": "Greeter", "signature": "class Greeter",
+     "docFirstLine": "Greets people.", "fqName": "Greeter"},
+    {"kind": "FIELD", "name": "prefix", "symbolPath": "Greeter.prefix",
+     "signature": "prefix: str = 'hi'", "receiver": "Greeter", "returnType": "str"},
+    {"kind": "METHOD", "name": "hello", "symbolPath": "Greeter#hello",
+     "signature": "def hello(self, name: str) -> str", "receiver": "Greeter",
+     "returnType": "str", "fqName": "Greeter.hello", "callTargets": ["name.upper"]},
+    {"kind": "METHOD", "name": "plain", "symbolPath": "plain",
+     "signature": "def plain(a: int, b: int = 1) -> int", "returnType": "int",
+     "fqName": "plain", "callTargets": ["add"]}
+  ],
+  "moduleImports": ["os", "typing.List as L"]
+}

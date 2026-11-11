@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """Self-test for the Python parser sidecar's extract() — stdlib unittest, no deps."""
+import json
+import os
 import unittest
 
-from parser_server import extract
+from parser_server import extract, extract_imports
+
+
+def _conformance_dir():
+    return os.path.join(os.path.dirname(__file__), "..", "conformance")
 
 
 class ExtractTest(unittest.TestCase):
@@ -40,6 +46,30 @@ class ExtractTest(unittest.TestCase):
 
     def test_empty_source_has_no_symbols(self):
         self.assertEqual(extract(""), [])
+
+
+class ConformanceTest(unittest.TestCase):
+    """The shared contract fixture: extract() must emit the expected neutral symbols."""
+
+    def setUp(self):
+        d = _conformance_dir()
+        with open(os.path.join(d, "sample.py")) as f:
+            self.source = f.read()
+        with open(os.path.join(d, "sample.py.expected.json")) as f:
+            self.expected = json.load(f)
+
+    def test_matches_expected_symbols(self):
+        got = {s["symbolPath"]: s for s in extract(self.source)}
+        for exp in self.expected["symbols"]:
+            path = exp["symbolPath"]
+            self.assertIn(path, got, f"missing symbol {path}")
+            actual = got[path]
+            for field, value in exp.items():
+                self.assertEqual(actual.get(field), value,
+                                 f"{path}.{field}: expected {value!r} got {actual.get(field)!r}")
+
+    def test_module_imports(self):
+        self.assertEqual(extract_imports(self.source), self.expected["moduleImports"])
 
 
 if __name__ == "__main__":

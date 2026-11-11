@@ -62,7 +62,15 @@ language) + `dylext.parsers.<language>=<url>`.
 - **Java** — in-process (`JavaParser`), always on.
 - **Python / Go** — out-of-process sidecars (`parsers/python`, `parsers/go`) behind
   `HttpSkeletonExtractor`, each parsing with its own native tool (`ast`, `go/parser`) and emitting
-  one neutral symbol contract: `{kind,name,symbolPath,signature,docFirstLine,startLine,endLine,callTargets}`.
+  one neutral symbol contract (see **[`parsers/CONTRACT.md`](parsers/CONTRACT.md)** — the single
+  source of truth, with a shared conformance fixture each sidecar is tested against).
+
+Each parser emits **full fidelity**, not just names: typed signatures (params + return types;
+Python hints/defaults/decorators), structural kinds (Go struct fields, interface methods,
+consts/vars; Python module vars + class attributes), module import/dependency surface, and
+**qualified call targets** (`recv.method`, `pkg.Func`, `self.attr`). Qualified targets are
+normalized to their simple name at edge time so cross-file call resolution works uniformly across
+Java, Go and Python — making `impact_of` / blast-radius meaningful in every language.
 
 **Adding a language = a new sidecar + one config line — zero Dylext code change.** Parsers are
 optional: with none configured Dylext is Java-only; a parser that is down/unreachable degrades to a
