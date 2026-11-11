@@ -74,6 +74,12 @@ See `docs/EVIDENCE.md`. Measured +97% on scattered-symbol tasks against this rep
 (real tiktoken) or `HarnessServiceIT` (headless, CI).
 
 
+## Performance (measured)
+
+Indexed a large external Java repo (1259 files → **18k symbols in 58 s**, ~309 symbols/s), then
+tool-call latency over stdio on the warm index: `expand` p50 **3.5 ms**, `get_digest` **4.3 ms**,
+`search_symbols` **24 ms** (p95 29 ms). Single-digit-ms reads are the static-index payoff.
+
 ## How the three apps fit together
 
 For the full explanation of how **Sestacon** (concepts/docs), **code-memory** (fuzzy code recall),
