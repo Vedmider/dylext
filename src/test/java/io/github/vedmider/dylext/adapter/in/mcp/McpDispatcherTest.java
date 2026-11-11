@@ -45,12 +45,14 @@ class McpDispatcherTest {
             mock(io.github.vedmider.dylext.domain.port.in.SessionUseCase.class);
     private final io.github.vedmider.dylext.domain.port.in.VerifyUseCase verify =
             mock(io.github.vedmider.dylext.domain.port.in.VerifyUseCase.class);
+    private final io.github.vedmider.dylext.domain.port.in.UnifiedAnswerUseCase unified =
+            mock(io.github.vedmider.dylext.domain.port.in.UnifiedAnswerUseCase.class);
     private McpDispatcher dispatcher;
 
     @BeforeEach
     void setup() {
         dispatcher = new McpDispatcher(index, retrieve, impact, dynamic, ledger, sync, federated,
-                session, verify);
+                session, verify, unified);
         when(ledger.totals()).thenReturn(new Totals(3, 100, 400));
     }
 
@@ -179,6 +181,20 @@ class McpDispatcherTest {
                  "params":{"name":"explain","arguments":{"query":"x"}}}""");
         assertThat(r.path("result").path("content").get(0).path("json").isArray()).isTrue();
         assertThat(r.path("result").path("content").get(0).path("json")).isEmpty();
+    }
+
+    @Test
+    void answerToolRoutesThroughUnifiedUseCase() throws Exception {
+        when(unified.answer(eq("how does Foo#bar work"), eq("r"), any(), anyInt()))
+                .thenReturn(new io.github.vedmider.dylext.domain.port.in.UnifiedAnswerUseCase.Result(
+                        "how does Foo#bar work",
+                        io.github.vedmider.dylext.domain.port.in.UnifiedAnswerUseCase.Intent.BOTH,
+                        List.of(), List.of(), true, true));
+        JsonNode r = handle("""
+                {"jsonrpc":"2.0","id":21,"method":"tools/call",
+                 "params":{"name":"answer","arguments":{"query":"how does Foo#bar work","repo":"r"}}}""");
+        assertThat(r.path("result").path("content").get(0).path("json").path("intent").asText())
+                .isEqualTo("BOTH");
     }
 
     @Test

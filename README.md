@@ -33,7 +33,11 @@ where/show + live edits → native Dylext tools.** Full routing and flow in
 ## Tools (MCP, JSON-RPC over stdio)
 
 `outline` · `search_symbols` · `get_digest` · `expand` · `impact_of` · `recent_changes` ·
-`working_changes` · `index` · `sync` · `ledger`
+`working_changes` · `index` · `sync` · `explain` · `recall` · `verify_claims` · `answer` · `ledger`
+
+`answer` is the unified front door: it classifies the question (code vs doc intent), fans out to
+the symbol index and/or Sestacon docs, and returns merged, evidence-backed citations (symbol
+locations + doc sources). Each side degrades independently.
 
 Every `tools/call` response carries a `tokens` footer (running ledger totals).
 
@@ -66,6 +70,21 @@ bash scripts/dev-local.sh down     # tear down + wipe data
 
 Persistence always runs in Docker (pgvector). The app itself runs either as a container (compose)
 or as a plain `java -jar` on the host — no Kubernetes required.
+
+## Standalone vs composed
+
+Dylext and Sestacon run **independently** or **together** — the dependency is one-way
+(Dylext → Sestacon) and optional.
+
+- **Standalone:** run Dylext alone; all code tools work. Only `explain`/`recall`/`answer`'s doc side
+  degrades (empty) when no doc service is reachable — code evidence is still returned.
+- **Composed:** start Sestacon (`bash scripts/dev-local.sh up` in that repo, :18080), then point
+  Dylext at it with `RAG_URL`. The `answer` tool then blends code + docs, propagating the caller's
+  `roles` into Sestacon's RBAC so permission-aware retrieval holds across the boundary.
+  Container: `compose` already defaults `RAG_URL=http://host.docker.internal:18080`; host jar:
+  `RAG_URL=http://localhost:18080 bash scripts/dev-local.sh mcp`.
+
+Sestacon never depends on Dylext, so it is unaffected by whether Dylext is present.
 
 ## Token savings
 

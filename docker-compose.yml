@@ -21,6 +21,12 @@ services:
       DB_URL: jdbc:postgresql://pg:5432/dylext
       DB_USERNAME: dylext
       DB_PASSWORD: dylext
+      # Composed mode: point federation at a running Sestacon (docs) + code-memory.
+      # Default assumes those run on the host; override for other topologies.
+      RAG_URL: ${RAG_URL:-http://host.docker.internal:18080}
+      CM_URL: ${CM_URL:-http://host.docker.internal:8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${APP_PORT:-8080}:8080"
     # Mount a repo read-only to index it from inside the container:

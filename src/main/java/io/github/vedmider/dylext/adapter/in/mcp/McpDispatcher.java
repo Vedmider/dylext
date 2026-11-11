@@ -29,13 +29,15 @@ public class McpDispatcher {
     private final io.github.vedmider.dylext.domain.port.in.FederatedContextUseCase federated;
     private final io.github.vedmider.dylext.domain.port.in.SessionUseCase session;
     private final io.github.vedmider.dylext.domain.port.in.VerifyUseCase verify;
+    private final io.github.vedmider.dylext.domain.port.in.UnifiedAnswerUseCase unified;
 
     public McpDispatcher(IndexUseCase index, RetrieveUseCase retrieve, ImpactUseCase impact,
                          DynamicContextUseCase dynamic, LedgerUseCase ledger,
                          io.github.vedmider.dylext.domain.port.in.SyncUseCase sync,
                          io.github.vedmider.dylext.domain.port.in.FederatedContextUseCase federated,
                          io.github.vedmider.dylext.domain.port.in.SessionUseCase session,
-                         io.github.vedmider.dylext.domain.port.in.VerifyUseCase verify) {
+                         io.github.vedmider.dylext.domain.port.in.VerifyUseCase verify,
+                         io.github.vedmider.dylext.domain.port.in.UnifiedAnswerUseCase unified) {
         this.index = index;
         this.retrieve = retrieve;
         this.impact = impact;
@@ -45,6 +47,7 @@ public class McpDispatcher {
         this.federated = federated;
         this.session = session;
         this.verify = verify;
+        this.unified = unified;
     }
 
     /** @return the JSON-RPC response string, or null for a notification (no id). */
@@ -94,6 +97,9 @@ public class McpDispatcher {
         tools.add(tool("index", "Index a repo's Java source into static context.", "repo", "root"));
         tools.add(tool("sync", "Refresh a repo's index.", "repo", "root"));
         tools.add(tool("explain", "Concept/doc answer via Sestacon (what/why/which/convention). Use for NL intent.", "query"));
+        tools.add(tool("answer",
+                "Unified front door: routes by intent to code index and/or Sestacon docs and returns merged, evidence-backed citations (symbol locations + doc sources). Each side degrades independently. Needs 'query'; pass 'repo' to include code.",
+                "query"));
         tools.add(tool("recall", "Fuzzy graph-ranked code recall via code-memory (where-is, name unknown).", "query"));
         tools.add(tool("verify_claims",
                 "Ground an answer's code references against the symbol index: each cited symbol is marked VERIFIED (with its real signature+location) or UNVERIFIED (not found). Use to catch hallucinated code in an explain/LLM answer.",
@@ -135,6 +141,8 @@ public class McpDispatcher {
             case "sync" -> sync.sync(req(args, "repo"), req(args, "root"));
             case "explain" -> federated.explain(req(args, "query"),
                     args.path("roles").asText(null), clampTopK(args, 3));
+            case "answer" -> unified.answer(req(args, "query"), args.path("repo").asText(null),
+                    args.path("roles").asText(null), clampTopK(args, 5));
             case "recall" -> federated.recall(req(args, "query"), clampTopK(args, 5));
             case "verify_claims" -> verify.verify(req(args, "answer"), req(args, "repo"));
             case "session_start" -> session.start(req(args, "task"));

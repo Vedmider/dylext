@@ -56,6 +56,8 @@ mcp_stdio() {
   echo "== dylext stdio MCP server (Ctrl-D to quit) =="
   java -Ddylext.mcp.stdio=true \
        -DDB_URL="${DB_URL:-jdbc:postgresql://localhost:5432/dylext}" \
+       -Ddylext.federation.rag-url="${RAG_URL:-http://localhost:18080}" \
+       -Ddylext.federation.cm-url="${CM_URL:-http://localhost:8080}" \
        -jar "$jar"
 }
 
