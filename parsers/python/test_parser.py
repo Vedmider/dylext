@@ -4,7 +4,7 @@ import json
 import os
 import unittest
 
-from parser_server import extract, extract_imports
+from parser_server import extract, extract_imports, parse_result
 
 
 def _conformance_dir():
@@ -70,6 +70,36 @@ class ConformanceTest(unittest.TestCase):
 
     def test_module_imports(self):
         self.assertEqual(extract_imports(self.source), self.expected["moduleImports"])
+
+    def test_module_exports(self):
+        from parser_server import module_exports
+        self.assertEqual(module_exports(self.source), self.expected["moduleExports"])
+
+    def test_init_is_constructor(self):
+        kinds = {s["symbolPath"]: s["kind"] for s in extract(self.source)}
+        self.assertEqual(kinds.get("Greeter#__init__"), "CONSTRUCTOR")
+        self.assertEqual(kinds.get("Greeter#hello"), "METHOD")
+
+
+class ParseVisibilityTest(unittest.TestCase):
+    """A syntax failure is distinguishable from a genuinely empty-but-valid file."""
+
+    def test_syntax_error_is_reported_not_silently_empty(self):
+        symbols, ok, err = parse_result("def broken(:\n", "bad.py")
+        self.assertFalse(ok)
+        self.assertEqual(symbols, [])
+        self.assertIn("SyntaxError", err)
+
+    def test_valid_empty_file_parses_ok_with_module_only(self):
+        symbols, ok, err = parse_result("# just a comment\n", "empty.py")
+        self.assertTrue(ok)
+        self.assertIsNone(err)
+        self.assertEqual([s["kind"] for s in symbols], ["MODULE"])
+
+    def test_valid_file_parses_ok_with_members(self):
+        symbols, ok, err = parse_result("def f():\n    pass\n", "f.py")
+        self.assertTrue(ok)
+        self.assertTrue(any(s["kind"] == "METHOD" for s in symbols))
 
 
 if __name__ == "__main__":

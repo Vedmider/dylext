@@ -119,25 +119,29 @@ def decorators(node):
 
 
 def call_targets(node):
-    """Qualified where resolvable: receiver.method / alias.func; bare name otherwise."""
+    """Qualified where resolvable: receiver.method / alias.func / self.attr.method; bare otherwise."""
     names = []
     for n in ast.walk(node):
         if isinstance(n, ast.Call):
-            f = n.func
-            if isinstance(f, ast.Name):
-                names.append(f.id)
-            elif isinstance(f, ast.Attribute):
-                base = f.value
-                if isinstance(base, ast.Name):
-                    names.append(base.id + "." + f.attr)
-                else:
-                    names.append(f.attr)
+            rendered = _callee(n.func)
+            if rendered:
+                names.append(rendered)
     seen, out = set(), []
     for n in names:
         if n not in seen:
             seen.add(n)
             out.append(n)
     return out
+
+
+def _callee(f):
+    """Render a call target: Name -> id; Attribute chain -> a.b.c; else bare attr/''"""
+    if isinstance(f, ast.Name):
+        return f.id
+    if isinstance(f, ast.Attribute):
+        base = _callee(f.value)
+        return (base + "." + f.attr) if base else f.attr
+    return ""
 
 
 def module_imports(tree):
@@ -201,8 +205,10 @@ def extract(source):
                 mods = decorators(child)
                 if isinstance(child, ast.AsyncFunctionDef):
                     mods.append("async")
+                # __init__ inside a class is the constructor; @property accessors stay METHOD.
+                kind = "CONSTRUCTOR" if (receiver and child.name == "__init__") else "METHOD"
                 sym = {
-                    "kind": "METHOD", "name": child.name, "symbolPath": path,
+                    "kind": kind, "name": child.name, "symbolPath": path,
                     "signature": func_signature(child),
                     "docFirstLine": first_doc_line(child),
                     "startLine": child.lineno, "endLine": end_line(child),
@@ -235,6 +241,25 @@ def extract(source):
     return symbols
 
 
+def module_exports(source):
+    """Names listed in module-level __all__, if any (the public API surface)."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    for n in tree.body:
+        targets = []
+        if isinstance(n, ast.Assign):
+            targets = n.targets
+        elif isinstance(n, ast.AnnAssign):
+            targets = [n.target]
+        if any(isinstance(t, ast.Name) and t.id == "__all__" for t in targets):
+            val = n.value
+            if isinstance(val, (ast.List, ast.Tuple)):
+                return [_expr(e).strip("'\"") for e in val.elts]
+    return []
+
+
 def extract_imports(source):
     try:
         return module_imports(ast.parse(source))
@@ -252,7 +277,20 @@ def build_symbols(source, file_path):
               "signature": name, "docFirstLine": "", "startLine": 1,
               "endLine": max((m.get("endLine", 1) for m in members), default=1),
               "callTargets": [], "imports": extract_imports(source)}
+    exports = module_exports(source)
+    if exports:
+        module["modifiers"] = ["__all__:" + ",".join(exports)]
     return [module] + members
+
+
+def parse_result(source, file_path):
+    """Returns (symbols, parse_ok, error). Distinguishes a syntax failure (parse_ok=False)
+    from a genuinely empty-but-valid file (parse_ok=True, symbols=[module])."""
+    try:
+        ast.parse(source)
+    except SyntaxError as e:
+        return [], False, "SyntaxError: %s (line %s)" % (e.msg, e.lineno)
+    return build_symbols(source, file_path), True, None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -272,10 +310,14 @@ class Handler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("content-length", 0))
             req = json.loads(self.rfile.read(length) or b"{}")
-            self._send(200, {"symbols": build_symbols(
-                req.get("source", ""), req.get("filePath", ""))})
+            symbols, parse_ok, error = parse_result(
+                req.get("source", ""), req.get("filePath", ""))
+            body = {"symbols": symbols, "parseOk": parse_ok}
+            if error:
+                body["error"] = error
+            self._send(200, body)
         except Exception as e:  # never 500 the indexer; degrade to empty
-            self._send(200, {"symbols": [], "error": str(e)})
+            self._send(200, {"symbols": [], "parseOk": False, "error": str(e)})
 
     def _send(self, status, body):
         payload = json.dumps(body).encode()

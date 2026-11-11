@@ -49,7 +49,7 @@ symbol so indexing never fails.
 | interface          | INTERFACE          | interface → INTERFACE     | (ABC/Protocol) → CLASS      |
 | enum / record      | ENUM / RECORD      | —                         | —                           |
 | function/method    | METHOD             | func → METHOD             | def → METHOD                |
-| constructor        | CONSTRUCTOR        | —                         | `__init__` → METHOD         |
+| constructor        | CONSTRUCTOR        | —                         | `__init__` → CONSTRUCTOR     |
 | field/const/var    | FIELD              | field/const/var → FIELD   | class attr / module var → FIELD |
 | receiver/owner     | enclosing type     | method recv type          | enclosing class             |
 | module imports     | import decls       | import specs (+alias)     | import / from-import (+as)  |

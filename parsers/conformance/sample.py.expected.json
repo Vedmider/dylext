@@ -5,6 +5,12 @@
      "docFirstLine": "Greets people.", "fqName": "Greeter"},
     {"kind": "FIELD", "name": "prefix", "symbolPath": "Greeter.prefix",
      "signature": "prefix: str = 'hi'", "receiver": "Greeter", "returnType": "str"},
+    {"kind": "CONSTRUCTOR", "name": "__init__", "symbolPath": "Greeter#__init__",
+     "signature": "def __init__(self, prefix: str) -> None", "receiver": "Greeter",
+     "returnType": "None", "fqName": "Greeter.__init__"},
+    {"kind": "METHOD", "name": "shout_prefix", "symbolPath": "Greeter#shout_prefix",
+     "signature": "def shout_prefix(self) -> str", "receiver": "Greeter", "returnType": "str",
+     "fqName": "Greeter.shout_prefix", "modifiers": ["property"], "callTargets": ["self.prefix.upper"]},
     {"kind": "METHOD", "name": "hello", "symbolPath": "Greeter#hello",
      "signature": "def hello(self, name: str) -> str", "receiver": "Greeter",
      "returnType": "str", "fqName": "Greeter.hello", "callTargets": ["name.upper"]},
@@ -12,5 +18,6 @@
      "signature": "def plain(a: int, b: int = 1) -> int", "returnType": "int",
      "fqName": "plain", "callTargets": ["add"]}
   ],
-  "moduleImports": ["os", "typing.List as L"]
+  "moduleImports": ["os", "typing.List as L"],
+  "moduleExports": ["Greeter", "plain"]
 }

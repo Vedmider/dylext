@@ -49,13 +49,24 @@ typed signatures + structural kinds + qualified, cross-file-resolvable call edge
 | repo (files) | symbols before → after | kinds | signature completeness | edge resolution* |
 |---|---|---|---|---|
 | Go — `eric-ran-rad-lcm-batchservice` (332) | 4270 → **6222** (+46%) | 2 → **4** (CLASS, FIELD, INTERFACE, METHOD) | 66% of methods carry params + return | 62% of sampled methods have ≥1 resolved caller |
-| Python — `cloudran-test-rce` (181) | 1058 → **3755** (+255%) | **3** (CLASS, FIELD, METHOD) | **100%** typed | 28%* |
+| Python — `cloudran-test-rce` (181) | 1058 → **3813** (+260%) | **3** (CLASS, FIELD, METHOD) | **100%** typed | **39%** edge-level (100% of in-repo-resolvable)* |
 
-\* Edge resolution = fraction of sampled methods for which `impact_of` returns at least one caller
-resolved to a defining symbol **in the same repo**. Python is lower by nature: many calls target
-imported/builtin/dynamic names with no in-repo definition — a true property of the codebase, not a
-parser defect. The symbol-count jumps come from newly captured structural symbols (Go struct
-fields / interface methods / consts; Python module vars / class attributes).
+Measured with the sidecar on **Python 3.12** (its production runtime). The sidecar's parse fidelity
+is version-dependent: on this repo 3 of 181 files use 3.8+ syntax and fail to parse under an older
+host interpreter — so always run/measure the sidecar on the version it ships with (3.12). Parse
+failures are now **reported** (`parseOk:false` + reason) rather than silently yielding an empty
+file, so a runtime mismatch is visible instead of hidden.
+
+\* Edge resolution is reported two ways. **Edge-level** (the honest metric): of all call edges
+emitted, the fraction linked to a defining symbol in the same repo — **Python: 1038/2643 = 39%**.
+Critically, of the 1605 unresolved edges, **0** name a symbol that exists anywhere in the repo:
+every unresolved call targets stdlib/third-party/dynamic code with no in-repo definition, so the
+parser already resolves **100% of what is in-principle resolvable**. (The sampled "methods with ≥1
+inbound caller" proxy reads lower, ~18–28%, because this library/test repo's methods are mostly
+framework entry points with no in-repo caller — a structural property, not a parser limit.) Raising
+this further needs cross-package type inference (Tier 3, `docs/TIER3-PLAN.md`), not better parsing.
+The symbol-count jumps come from newly captured structural symbols (Go struct fields / interface
+methods / consts; Python module vars / class attributes).
 
 Quality is a measured number, not a claim; re-run the gate after any parser change to catch
 regressions. All parsers conform to `parsers/CONTRACT.md` (shared fixture enforced in each sidecar's
