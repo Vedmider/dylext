@@ -25,6 +25,9 @@ services:
       # Default assumes those run on the host; override for other topologies.
       RAG_URL: ${RAG_URL:-http://host.docker.internal:18080}
       CM_URL: ${CM_URL:-http://host.docker.internal:8080}
+      # Lego parsers: enabling a language = one env line pointing at its sidecar. No app change.
+      DYLEXT_PARSERS_PYTHON: http://python-parser:9091
+      DYLEXT_PARSERS_GO: http://go-parser:9092
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -33,3 +36,17 @@ services:
     #   REPO_MOUNT=/path/to/repo docker compose up
     volumes:
       - ${REPO_MOUNT:-./}:/workspace:ro
+
+  python-parser:
+    build:
+      context: ./parsers/python
+      args:
+        REGISTRY: ${REGISTRY:-docker.io/library}
+    image: ${PY_PARSER_IMAGE:-dylext-python-parser:0.1.0}
+
+  go-parser:
+    build:
+      context: ./parsers/go
+      args:
+        REGISTRY: ${REGISTRY:-docker.io/library}
+    image: ${GO_PARSER_IMAGE:-dylext-go-parser:0.1.0}

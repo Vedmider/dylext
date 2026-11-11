@@ -52,6 +52,31 @@ Hexagonal. Domain is transport/storage/git-agnostic.
 Static context is keyed by content hash (cache-friendly, incremental). Dynamic context is computed
 on read from git, never cached stale. Summaries are opt-in (default NoOp = extractive-only).
 
+## Languages — swappable parser Lego
+
+Parsing is a port (`SkeletonExtractor`), so a language is a pluggable implementation, not core code.
+Dylext owns every pipeline (index, store, git, verify, ledger); a parser only turns a file into
+symbols. The core never names a language — routing is data-driven by `dylext.languages` (extension →
+language) + `dylext.parsers.<language>=<url>`.
+
+- **Java** — in-process (`JavaParser`), always on.
+- **Python / Go** — out-of-process sidecars (`parsers/python`, `parsers/go`) behind
+  `HttpSkeletonExtractor`, each parsing with its own native tool (`ast`, `go/parser`) and emitting
+  one neutral symbol contract: `{kind,name,symbolPath,signature,docFirstLine,startLine,endLine,callTargets}`.
+
+**Adding a language = a new sidecar + one config line — zero Dylext code change.** Parsers are
+optional: with none configured Dylext is Java-only; a parser that is down/unreachable degrades to a
+MODULE-only skeleton for its files (the index never fails on a parser). Dylext owns symbol identity
+(`repo:filePath:symbolPath`) and hashing, so sidecars stay dumb and interchangeable.
+
+```bash
+# host jar: enable parsers (sidecars running on the host)
+DYLEXT_PARSERS_PYTHON=http://localhost:9091 DYLEXT_PARSERS_GO=http://localhost:9092 \
+  bash scripts/dev-local.sh mcp
+# compose: the python-parser + go-parser services are wired automatically
+docker compose up -d
+```
+
 ## Build & test
 
 ```bash

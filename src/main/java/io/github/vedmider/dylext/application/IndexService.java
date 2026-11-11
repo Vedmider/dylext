@@ -22,12 +22,12 @@ import java.util.stream.Stream;
 @Service
 public class IndexService implements IndexUseCase {
 
-    private final SkeletonExtractor extractor;
+    private final LanguageRouter router;
     private final DigestStore store;
     private final Tokenizer tokenizer;
 
-    public IndexService(SkeletonExtractor extractor, DigestStore store, Tokenizer tokenizer) {
-        this.extractor = extractor;
+    public IndexService(LanguageRouter router, DigestStore store, Tokenizer tokenizer) {
+        this.router = router;
         this.store = store;
         this.tokenizer = tokenizer;
     }
@@ -42,7 +42,7 @@ public class IndexService implements IndexUseCase {
         int symbols = 0;
         try (Stream<Path> walk = Files.walk(base)) {
             List<Path> files = walk.filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(".java"))
+                    .filter(p -> router.supports(p.toString()))
                     .toList();
             for (Path file : files) {
                 scanned++;
@@ -83,7 +83,11 @@ public class IndexService implements IndexUseCase {
         if (existing.isPresent() && existing.get().equals(fileHash)) {
             return -1;
         }
-        List<Symbol> symbols = extractor.extract(repo, rel, source);
+        Optional<SkeletonExtractor> extractor = router.extractorFor(rel);
+        if (extractor.isEmpty()) {
+            return -1;   // no configured parser for this language; skip, don't fail
+        }
+        List<Symbol> symbols = extractor.get().extract(repo, rel, source);
         pruneRemovedSymbols(repo, rel, symbols);
         for (Symbol s : symbols) {
             String text = skeletonText(s);

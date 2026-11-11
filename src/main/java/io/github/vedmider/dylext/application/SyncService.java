@@ -21,11 +21,13 @@ public class SyncService implements SyncUseCase {
     private final IndexUseCase index;
     private final DigestStore store;
     private final VcsClient vcs;
+    private final LanguageRouter router;
 
-    public SyncService(IndexUseCase index, DigestStore store, VcsClient vcs) {
+    public SyncService(IndexUseCase index, DigestStore store, VcsClient vcs, LanguageRouter router) {
         this.index = index;
         this.store = store;
         this.vcs = vcs;
+        this.router = router;
     }
 
     @Override
@@ -42,7 +44,7 @@ public class SyncService implements SyncUseCase {
         }
 
         List<String> changed = vcs.changedFilesSince(root, cursor.get()).stream()
-                .filter(p -> p.endsWith(".java"))
+                .filter(router::supports)
                 .toList();
         for (String rel : changed) {
             if (Files.exists(Path.of(root).resolve(rel))) {
