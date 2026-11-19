@@ -45,10 +45,12 @@ up() {
   source "$REPO/env.sh"
   pg_up || { echo "postgres did not start"; exit 1; }
   [ -f "$JAR" ] || ( cd "$REPO" && mvn -B -q -DskipTests package ) || { echo "build failed"; exit 1; }
+  # run a copy: `mvn package/verify` rewrites target/*.jar and breaks lazy class loading in the running JVM
+  RUN_JAR=/tmp/tester-dylext-run.jar; cp "$JAR" "$RUN_JAR"
   nohup java -Dserver.port="$PORT" -DDB_URL="jdbc:postgresql://localhost:$PG_PORT/dylext" \
     -Ddylext.parsers.python="$PY_PARSER_URL" -Ddylext.parsers.go="$GO_PARSER_URL" \
     -Ddylext.parsers.typescript="$TS_PARSER_URL" \
-    -jar "$JAR" >"$LOG" 2>&1 &
+    -jar "$RUN_JAR" >"$LOG" 2>&1 &
   echo $! > "$PIDF"
   for _ in $(seq 1 60); do healthy && { echo "UP http://localhost:$PORT/mcp (pid $(cat "$PIDF"))"; return 0; }; sleep 1; done
   echo "dylext did not become healthy; tail of $LOG:"; tail -20 "$LOG"; exit 1

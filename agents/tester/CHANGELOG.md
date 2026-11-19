@@ -40,3 +40,5 @@
   CodeEdge carries arity+recv; call targets encode "[recv.]name[/arity]" (Java + TS emit /arity); resolver picks
   arity-exact -> receiver-match -> stable id behind dylext.edges.resolve (default arity). Java overloads now
   resolve by call-site arity end-to-end. Go/Python unchanged (no method overloading). See I-003-DESIGN.md.
+
+- 2026-11-19 dylext.sh runs a copy of the jar (/tmp/tester-dylext-run.jar): rebuilding target/*.jar under the running JVM caused NoClassDefFoundError (logback ThrowableProxy) and gateway timeouts (HARNESS).

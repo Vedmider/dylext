@@ -296,18 +296,21 @@ public class PgDigestStore implements DigestStore {
         List<PendingEdge> pending = jdbc.query(
                 "SELECT e.id, e.dst_name, e.dst_arity, e.dst_param_types, e.dst_recv, s.language, s.symbol_path "
                         + "FROM edges e "
-                        + "JOIN symbols s ON s.id = e.src_id WHERE e.dst_id IS NULL AND e.repo = ?",
+                        + "JOIN symbols s ON s.id = e.src_id WHERE e.dst_id IS NULL AND e.repo = ? "
+                        + "AND EXISTS (SELECT 1 FROM symbols t WHERE t.repo = e.repo AND t.name = e.dst_name)",
                 (rs, i) -> new PendingEdge(rs.getLong("id"), rs.getString("dst_name"),
                         (Integer) rs.getObject("dst_arity"), rs.getString("dst_param_types"),
                         rs.getString("dst_recv"), rs.getString("language"), rs.getString("symbol_path")),
                 repo);
+        java.util.Map<String, List<Candidate>> byName = new java.util.HashMap<>();
+        List<Object[]> resolved = new java.util.ArrayList<>();
         for (PendingEdge e : pending) {
-            List<Candidate> candidates = jdbc.query(
+            List<Candidate> candidates = byName.computeIfAbsent(e.language() + "\u0000" + e.dstName(), k -> jdbc.query(
                     "SELECT id, symbol_path, arity, kind FROM symbols WHERE repo = ? AND name = ? "
                             + "AND symbol_path <> '<module>' AND kind <> 'FIELD' AND language = ?",
                     (rs, i) -> new Candidate(rs.getString("id"), rs.getString("symbol_path"),
                             (Integer) rs.getObject("arity"), rs.getString("kind")),
-                    repo, e.dstName(), e.language());
+                    repo, e.dstName(), e.language()));
             if (typeLike(e.recv())) {
                 candidates = candidates.stream().filter(c -> c.ownedBy(e.recv())).toList();   // none = external type
             } else if ("this".equals(e.recv())) {
@@ -328,18 +331,19 @@ public class PgDigestStore implements DigestStore {
             }
             List<Candidate> pool = byArity.isEmpty() ? candidates : byArity;
             if (pool.size() == 1) {
-                jdbc.update("UPDATE edges SET dst_id = ? WHERE id = ?", pool.get(0).id(), e.id());
+                resolved.add(new Object[]{pool.get(0).id(), e.id()});
                 continue;
             }
             List<Candidate> byType = e.paramTypes() == null ? List.of() : pool.stream()
                     .filter(c -> e.paramTypes().equals(paramTypesOf(c.symbolPath())))
                     .toList();
             if (byType.size() == 1) {   // tier A: exact overload by inferred param types
-                jdbc.update("UPDATE edges SET dst_id = ? WHERE id = ?", byType.get(0).id(), e.id());
+                resolved.add(new Object[]{byType.get(0).id(), e.id()});
                 continue;
             }
             fanOutAmbiguous(e.id(), repo, pool);   // tier C: un-splittable tie
         }
+        jdbc.batchUpdate("UPDATE edges SET dst_id = ? WHERE id = ?", resolved);
     }
 
     /** Point the edge at the first candidate and clone an ambiguous edge for each remaining one. */

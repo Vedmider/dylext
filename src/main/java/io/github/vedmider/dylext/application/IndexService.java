@@ -165,13 +165,14 @@ public class IndexService implements IndexUseCase {
         List<Symbol> toStore = degraded ? symbols.stream().map(IndexService::retryable).toList() : symbols;
 
         store.atomically(() -> {
-            java.util.Set<String> names = changedNames(store.symbolsInFile(repo, rel), toStore);
+            List<Symbol> before = store.symbolsInFile(repo, rel);
+            java.util.Set<String> names = changedNames(before, toStore);
             if (reopened == null) {
                 store.reopenEdgesTo(repo, names);
             } else {
                 reopened.addAll(names);   // batched: one reopen before the walk's resolve
             }
-            pruneRemovedSymbols(repo, rel, toStore);
+            pruneRemovedSymbols(before, toStore);
             for (Symbol s : toStore) {
                 String text = skeletonText(s);
                 store.upsert(s, new Skeleton(s.id(), hashFor(s, fileHash), text, tokenizer.count(text)));
@@ -269,9 +270,9 @@ public class IndexService implements IndexUseCase {
         return names;
     }
 
-    private void pruneRemovedSymbols(String repo, String rel, List<Symbol> current) {
+    private void pruneRemovedSymbols(List<Symbol> before, List<Symbol> current) {
         var keep = current.stream().map(Symbol::id).collect(java.util.stream.Collectors.toSet());
-        for (Symbol existing : store.symbolsInFile(repo, rel)) {
+        for (Symbol existing : before) {
             if (!keep.contains(existing.id())) {
                 store.deleteSymbol(existing.id());
             }

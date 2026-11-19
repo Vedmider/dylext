@@ -351,4 +351,27 @@ class ImpactServiceIT {
         assertThat(impact.impactOf("late:demo/Port.java:demo.Port#fetch(String)").callers())
                 .contains("late:demo/Service.java:demo.Service#answer(String)");
     }
+
+    @Test
+    void methodReferencesAreCallers(@TempDir Path dir) throws IOException {
+        Files.createDirectories(dir.resolve("demo"));
+        Files.writeString(dir.resolve("demo/Fmt.java"), """
+                package demo;
+                public class Fmt {
+                    public static String shout(String s) { return s.toUpperCase(); }
+                }
+                """);
+        Files.writeString(dir.resolve("demo/Caller.java"), """
+                package demo;
+                public class Caller {
+                    public java.util.List<String> all(java.util.List<String> in) {
+                        return in.stream().map(Fmt::shout).toList();
+                    }
+                }
+                """);
+        index.index("mref", dir.toString());
+
+        assertThat(impact.impactOf("mref:demo/Fmt.java:demo.Fmt#shout(String)").callers())
+                .contains("mref:demo/Caller.java:demo.Caller#all(java.util.List<String>)");
+    }
 }

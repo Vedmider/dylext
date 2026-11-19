@@ -219,11 +219,27 @@ public class JavaSkeletonExtractor implements io.github.vedmider.dylext.domain.p
         return typeLike ? name + "." : "";
     }
 
+    // Arity is unknown for a reference (Fmt::shout); Type::new targets the type's constructor.
+    private static String methodReferenceTarget(com.github.javaparser.ast.expr.MethodReferenceExpr ref) {
+        String scope = ref.getScope() instanceof com.github.javaparser.ast.expr.TypeExpr t
+                ? t.getType().asString().replaceAll("<.*>", "")
+                : null;
+        String simple = scope == null ? null : scope.substring(scope.lastIndexOf('.') + 1);
+        if ("new".equals(ref.getIdentifier())) {
+            return simple == null ? "new" : simple;
+        }
+        boolean typeLike = simple != null && Character.isUpperCase(simple.charAt(0))
+                && !simple.equals(simple.toUpperCase(java.util.Locale.ROOT));
+        return (typeLike ? simple + "." : "") + ref.getIdentifier();
+    }
+
     private static List<String> callTargets(com.github.javaparser.ast.Node node) {
         Set<String> targets = new LinkedHashSet<>();
         node.findAll(MethodCallExpr.class).forEach(call ->
                 targets.add(typeReceiver(call) + call.getNameAsString() + "/" + call.getArguments().size()
                         + inferredParamTypes(call.getArguments())));
+        node.findAll(com.github.javaparser.ast.expr.MethodReferenceExpr.class).forEach(ref ->
+                targets.add(methodReferenceTarget(ref)));
         node.findAll(ObjectCreationExpr.class).forEach(call ->
                 targets.add(call.getType().getNameAsString() + "/" + call.getArguments().size()
                         + inferredParamTypes(call.getArguments())));
