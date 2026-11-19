@@ -10,10 +10,10 @@ NOT covered there. Sestacon API cases live in `e2e/sestacon_probe.py` (SA01-SA13
 | DX01 | `search_symbols` with regex/SQL metacharacters, `%`, `_`, quotes, very long query | todo |
 | DX02 | `pathPrefix` with `..`, absolute path, backslashes, unicode | todo |
 | DX03 | `expand`/`get_digest` for a symbol whose file was deleted on disk but not yet re-indexed | todo |
-| DX04 | `index` of a huge single file (5 MB generated source) and a 20k-file repo: time and memory | todo |
+| DX04 | `index` of a huge single file (5 MB generated source) and a 20k-file repo: time and memory | done-pass(O18 ~116-128 s/20k, at budget) |
 | DX05 | symlinked directory and symlink loop inside a repo | todo |
 | DX06 | git submodule: root listing, `working_changes`, index behaviour | todo |
-| DX07 | two MCP clients indexing and querying the same repo concurrently | todo |
+| DX07 | two MCP clients indexing and querying the same repo concurrently | done-pass |
 | DX08 | restart Dylext mid-index, then resume: no duplicate or half-written symbols | todo |
 | DX09 | DB down during a query: error shape and recovery without restart | todo |
 | DX10 | MCP protocol: invalid JSON, unknown method, missing `params`, huge payload, id types | todo |
@@ -30,6 +30,7 @@ NOT covered there. Sestacon API cases live in `e2e/sestacon_probe.py` (SA01-SA13
 | DX21 | stdio stdout purity when launched with defaults | done-finding(F-001) |
 | DX22 | HTTP `/mcp`: notifications, batch arrays, wrong content type, huge body, concurrent calls | todo |
 | DX23 | `impact_of` for framework-wired classes (Spring beans, controllers) reports zero callers: is that signalled? | done-finding(F-005) |
+| DX25 | impact_of precision on real code (fields, ctors, external types, method refs, late implementations) | done-finding(F-024,F-026) |
 | DX24 | TS/JS idiomatic parsing: arrow-fn/function-expr consts, CommonJS `module.exports`/`exports.x`, `type` aliases, anonymous `export default`; call edges from arrow consts | done-finding(F-019) |
 
 ## Sestacon, uncovered or exploratory
@@ -49,6 +50,9 @@ NOT covered there. Sestacon API cases live in `e2e/sestacon_probe.py` (SA01-SA13
 | SX12 | prompt-injection text inside an ingested doc must not leak other docs or act as instructions | done-pass |
 | SX13 | error response shape consistency across all endpoints | done-pass |
 | SX14 | retrieval returns unrelated low-score hits for a topic with no docs (no score floor / no "no match" signal) | done-finding(F-004) |
+| SX15 | natural-language / non-English negatives pass the floor (golden set slices) | done-finding(F-028) |
+| SX16 | concurrent re-ingest of one document | done-finding(F-034) |
+| SX17 | retrieval latency on a multi-MB document | done-finding(F-033) |
 
 ## Cross-system
 | ID | Scenario | Status |

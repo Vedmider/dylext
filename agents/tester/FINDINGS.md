@@ -371,3 +371,53 @@ Fix: `DigestStore.reopenEdgesTo(repo, names)` (collapses fan-outs, resets to pen
 batched once per index walk (O18 throughput 158→177 files/s with the new `edges(repo,dst_name)` index, V7). Test:
 `ImpactServiceIT.aNewImplementationAddedLaterIsLinkedToExistingCallers` (red before). Live: DigestStore#fileContentHash now
 lists IndexService#indexFileAbsolute (was []).
+
+
+## F-027 Retrieval eval metrics were biased and could not measure abstention   [status: FIXED] [sev: M] [app: sestacon]
+Substring relevance (a.md matched data.md), negative cases dragged positive means, no hit rate/slices/latency, and the A/B
+gate compared naked means (a mean gain could hide a per-case regression). Fix: exact doc-id match, negative cases +
+abstention, hit rate, per-slice stats, latency p50/p95; AbComparison paired deltas, win/loss/tie, seeded bootstrap CI95,
+`bIsNoWorse` = CI lower bound >= 0. Golden set (21 pos / 11 neg, 9 slices) + `scripts/eval-live.py` (JSONL rows, --compare).
+Commits sestacon f9b2310, 0b05c0c.
+
+## F-028 The no-match floor was bypassed by natural-language and non-English questions   [status: FIXED] [sev: H] [app: sestacon]
+Reranker overlap counted stopwords/generic terms; non-Latin queries had no lexical signal and the English-only embedding
+scored unrelated Cyrillic text ~0.6. Fix: Unicode TextAnalyzer (EN/UK/RU stopwords, plural fold, Cyrillic suffix-tolerant
+match), IDF-weighted coverage over the candidate pool counted only at >= 0.6, vector similarity untrusted for non-Latin
+queries unless `app.rerank.vector-trusted-for-non-latin`. Same-corpus paired A/B: abstention 0.36 -> 1.00 (CI95 +0.36..+0.91),
+context precision 0.55 -> 0.71, MRR/recall/hit rate unchanged (0 losses). Hits expose vectorScore/lexicalScore.
+
+## F-029 Chat cited every retrieved chunk; refusals still cited sources and were "confident"   [status: FIXED] [sev: M] [app: sestacon]
+Fix: context keeps chunks >= 0.5 x top score (golden: context precision 0.81 -> 0.92, recall 1.00; 0.6+ loses multi-doc
+recall); a grounded refusal returns sources=[] and confident=false. Commits da24a85, 0c7178d.
+
+## F-030 Judge eval graded the wrong evidence and had no correctness metric   [status: FIXED] [sev: M] [app: sestacon]
+It judged a separate retrieval, counted stopwords as grounding, scored correct refusals as failures, ignored expectedGist.
+Fix: judge `Answer.contexts` (server-side, @JsonIgnore), TextAnalyzer terms, refusal accuracy / false-refusal rate,
+token-F1 correctness vs expectedGist. Commit 0c7178d.
+
+## F-031 Rate limiting collapsed behind the gateway; trusted XFF was spoofable   [status: FIXED] [sev: M] [app: sestacon]
+Every gateway caller shared one 60 rpm bucket (200 ingests at c=10 -> 139 x 429); with trust on, the leftmost
+(client-supplied) XFF entry keyed the bucket. Fix: rightmost hop, only from `app.rate-limit.trusted-proxies` (IP/CIDR);
+dev harness trusts the docker bridge. Commit f9c4220.
+
+## F-032 Cached answers survived configuration changes   [status: FIXED] [sev: M] [app: sestacon]
+Redis outlives deploys; answers produced under an old reranker/floor/topK/prompt/model were served for the TTL.
+Fix: cache namespace = fingerprint of answer-shaping properties. Commit 3e19eb7.
+
+## F-033 Retrieval re-tokenized whole hit documents per query   [status: FIXED] [sev: M] [app: sestacon]
+Load test, same corpus, 3.2 MB/633-chunk doc: p50 217 ms -> 105 ms after storing chunk token counts at ingest. Commit 545290b.
+Open: vector mode `PgVectorDocumentStore.sourceTokens` still runs a 10k-topK similarity search per hit.
+
+## F-034 Concurrent re-ingests of one document merged chunks of several versions   [status: FIXED] [sev: H] [app: sestacon]
+Load test: 20 concurrent re-ingests left 3-4 chunks from different versions (value 1, 12, 19 served together).
+Fix: diff/replace/record in one transaction under a per-document advisory lock (ingest, chunk ingest, delete).
+Test: ConcurrentReingestIT (red before). Live: 3/3 runs leave exactly one version. Commit 7fdc771.
+Open: vector mode store has no lock (default no-op).
+
+## Load test results (local, 6 cores, single node; not a capacity claim)
+- Sestacon retrieve (hybrid, ~230 docs): c=1 21 ms p50; saturates ~125-158 rps from c=10 (CPU-bound: app ~170%, PG ~140%);
+  c=100 p95 1.05 s, 0 errors. Ingest of a 3.2 MB doc: 56 s (633 sequential embed+insert; no batching) — open.
+- Dylext: search_symbols ~150 rps (c=50 p95 0.6 s); outline 315 rps; impact_of(class) saturates ~52 rps (c=50 p95 1.7 s:
+  per-member caller queries + whole-file reads for the ledger baseline) — open. 3 concurrent indexers of one repo: identical
+  symbol count, no duplicates. First read after new commits blocks on the on-read sync (~5 s here) — open (sync is inline).
