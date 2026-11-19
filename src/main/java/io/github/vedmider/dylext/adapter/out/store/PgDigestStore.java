@@ -204,6 +204,28 @@ public class PgDigestStore implements DigestStore {
     }
 
     @Override
+    public void reopenEdgesTo(String repo, java.util.Collection<String> names) {
+        if (names.isEmpty()) {
+            return;
+        }
+        String[] arr = names.toArray(String[]::new);
+        jdbc.update("""
+                DELETE FROM edges d USING edges k
+                WHERE d.repo = ? AND d.dst_name = ANY(?) AND d.ambiguous
+                  AND k.repo = d.repo AND k.src_id = d.src_id AND k.dst_name = d.dst_name
+                  AND k.dst_arity IS NOT DISTINCT FROM d.dst_arity AND k.dst_recv IS NOT DISTINCT FROM d.dst_recv
+                  AND k.dst_param_types IS NOT DISTINCT FROM d.dst_param_types AND k.id < d.id
+                """, ps -> {
+            ps.setString(1, repo);
+            ps.setArray(2, ps.getConnection().createArrayOf("text", arr));
+        });
+        jdbc.update("UPDATE edges SET dst_id = NULL, ambiguous = false WHERE repo = ? AND dst_name = ANY(?)", ps -> {
+            ps.setString(1, repo);
+            ps.setArray(2, ps.getConnection().createArrayOf("text", arr));
+        });
+    }
+
+    @Override
     public int indexGeneration(String repo) {
         return jdbc.query("SELECT index_generation FROM repo_state WHERE repo=?",
                 (rs, i) -> rs.getInt(1), repo).stream().findFirst().orElse(0);

@@ -336,3 +336,38 @@ Tests: `DocumentIngestionServiceTest.corpusChangeInvalidatesTheAnswerCacheButAnU
 Repro: ingest klendar.md (public); re-ingest with aclTags=LEGAL → status UNCHANGED; anon retrieve still returns it.
 Root cause: version dedup hashed content only. Fix: `ContentHash.ofSection(content, aclTags)` (public hashes unchanged).
 Tests: `DocumentIngestionServiceTest.reingestingIdenticalContentWithNewAclTagsRestoresTheChunksWithTheNewAcl`, probe SA22.
+
+
+## F-024 impact_of blast radius had false callers and missed real ones (name-only call resolution)   [status: FIXED] [sev: H] [app: dylext]
+Scenario: DX13 on real code (sestacon). `impact_of(EvalHarness)` listed RagQueryService/RetrievalService (never call it)
+and missed AbComparison/EvalHarnessIT (they do: `new EvalHarness(a)`); `impact_of(Answer)` = [] although
+RagQueryService constructs it; Python `eval-live.py` and `RagApplication` (`SpringApplication.run`) appeared as Java callers.
+Root causes (PgDigestStore.resolveTypeAware + JavaSkeletonExtractor.callTargets):
+ 1. a FIELD named like the called method (`EvalHarness#retrieve` field) was a call-target candidate;
+ 2. `new X(..)` emitted no edge, so constructors/records had no callers;
+ 3. candidates were not restricted to the caller's language;
+ 4. calls on external types (`List.of`, `SpringApplication.run`) bound to same-named repo methods;
+ 5. unqualified calls (`of(..)`) fanned out to every same-named method instead of the caller's own class;
+ 6. when no candidate matched the call's arity, the resolver bound to all same-name candidates anyway.
+Fix: callTargets emit `Type.`/`this.` receivers and constructor targets; resolver excludes fields, filters by language,
+by type receiver (none = external, left unresolved) and by own/enclosing class for `this`, prefers constructors over their
+class, and leaves Java arity mismatches unresolved. Tests (ImpactServiceIT): aFieldNamedLikeACalledMethodIsNeverACallTarget,
+constructorCallsAreCallersOfTheClass, aCallOnAnExternalTypeIsNotBoundToASameNamedRepoMethod,
+anUnqualifiedCallPrefersTheCallersOwnClass, aCallWhoseArityMatchesNoCandidateIsLeftUnresolved (all red before the fix).
+Verified live: EvalHarness → {AbComparison, EvalHarnessIT, EvalHarnessTest}; JudgeEvalHarness → {its test}; no foreign members.
+
+## F-025 Upgrading the extractor never re-extracted unchanged files (mixed-generation index)   [status: FIXED] [sev: M] [app: dylext]
+Evidence: after F-014 some files had `#method(Path)` ids and others `#method` for the same pattern; F-024 edges only for
+re-indexed files. Root cause: the unchanged-file shortcut compares the source hash only; nothing records which extractor built
+the index. Fix: `IndexGeneration.CURRENT` + `repo_state.index_generation` (V6); index re-extracts every file and FreshnessGate/
+sync rebuild when the stored generation is older (no commit needed). Tests: SyncServiceIT.anIndexBuiltByAnOlderExtractor
+GenerationIsFullyRebuiltOnSync, FreshnessGateIT.anIndexFromAnOlderGenerationIsRebuiltOnTheNextReadWithoutANewCommit.
+
+## F-026 Resolved edges are never re-resolved when a new same-name candidate appears   [status: FIXED] [sev: M] [app: dylext]
+Observed: `impact_of(DigestStore#fileContentHash)` = [] while the call resolved to `PgDigestStore#fileContentHash`; edges are
+resolved once (pending only) against the symbols present at that time. Plan: on upsert/delete of a symbol named N, reset
+dst_id of same-repo edges with dst_name N to pending, then resolve. Partially mitigated by F-025 (generation bump rebuilds).
+Fix: `DigestStore.reopenEdgesTo(repo, names)` (collapses fan-outs, resets to pending) for names whose candidate set changed;
+batched once per index walk (O18 throughput 158→177 files/s with the new `edges(repo,dst_name)` index, V7). Test:
+`ImpactServiceIT.aNewImplementationAddedLaterIsLinkedToExistingCallers` (red before). Live: DigestStore#fileContentHash now
+lists IndexService#indexFileAbsolute (was []).

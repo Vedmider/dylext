@@ -323,4 +323,32 @@ class ImpactServiceIT {
 
         assertThat(impact.impactOf("ari:demo/Harness.java:demo.Harness#score(String,int)").callers()).isEmpty();
     }
+
+    @Test
+    void aNewImplementationAddedLaterIsLinkedToExistingCallers(@TempDir Path dir) throws IOException {
+        Files.createDirectories(dir.resolve("demo"));
+        Files.writeString(dir.resolve("demo/Port.java"),
+                "package demo;\npublic interface Port { String fetch(String q); }\n");
+        Files.writeString(dir.resolve("demo/Service.java"), """
+                package demo;
+                public class Service {
+                    private final Port port;
+                    public Service(Port port) { this.port = port; }
+                    public String answer(String q) { return port.fetch(q); }
+                }
+                """);
+        index.index("late", dir.toString());
+        Files.writeString(dir.resolve("demo/Impl.java"), """
+                package demo;
+                public class Impl implements Port {
+                    public String fetch(String q) { return q; }
+                }
+                """);
+        index.index("late", dir.toString());
+
+        assertThat(impact.impactOf("late:demo/Impl.java:demo.Impl#fetch(String)").callers())
+                .contains("late:demo/Service.java:demo.Service#answer(String)");
+        assertThat(impact.impactOf("late:demo/Port.java:demo.Port#fetch(String)").callers())
+                .contains("late:demo/Service.java:demo.Service#answer(String)");
+    }
 }

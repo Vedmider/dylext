@@ -69,6 +69,10 @@ public interface DigestStore {
     default void saveIndexGeneration(String repo, int generation) {
     }
 
+    /** Return edges targeting any of {@code names} to pending (collapsing fan-outs) so they resolve against new candidates. */
+    default void reopenEdgesTo(String repo, java.util.Collection<String> names) {
+    }
+
     Optional<String> repoCursor(String repo);
 
     /** Replace all outgoing edges for a source symbol (called on (re)index of its file). */

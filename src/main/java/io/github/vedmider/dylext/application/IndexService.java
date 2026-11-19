@@ -65,6 +65,7 @@ public class IndexService implements IndexUseCase {
         // re-pointing a repo name at another folder must not leave the old folder's symbols behind
         String replaced = store.repoRoot(repo).filter(old -> !old.equals(rootStr)).orElse(null);
         boolean rebuild = store.indexGeneration(repo) < IndexGeneration.CURRENT;   // older extractor: re-extract all
+        java.util.Set<String> reopened = new java.util.HashSet<>();
         if (replaced != null) {
             store.clearRepo(repo);
         }
@@ -82,10 +83,12 @@ public class IndexService implements IndexUseCase {
                 case UNREACHABLE -> tally.unreachable.merge(routing.key(), 1, Integer::sum);
                 case PARSE -> {
                     tally.scanned++;
-                    tally.record(rel, indexFileAbsolute(repo, base.resolve(rel), rel, routing.extractor(), rebuild));
+                    tally.record(rel, indexFileAbsolute(repo, base.resolve(rel), rel, routing.extractor(), rebuild,
+                            reopened));
                 }
             }
         }
+        store.reopenEdgesTo(repo, reopened);
         store.resolvePendingEdges(repo);
         store.saveIndexGeneration(repo, IndexGeneration.CURRENT);
 
@@ -119,7 +122,7 @@ public class IndexService implements IndexUseCase {
             return 0;
         }
         FileOutcome outcome = indexFileAbsolute(repo, Path.of(root).resolve(relativePath), relativePath,
-                routing.extractor(), false);
+                routing.extractor(), false, null);
         store.resolvePendingEdges(repo);
         return Math.max(outcome.symbols, 0);
     }
@@ -140,7 +143,7 @@ public class IndexService implements IndexUseCase {
     }
 
     private FileOutcome indexFileAbsolute(String repo, Path file, String rel, SkeletonExtractor extractor,
-                                          boolean rebuild) {
+                                          boolean rebuild, java.util.Set<String> reopened) {
         String source;
         try {
             source = readSource(file);
@@ -162,6 +165,12 @@ public class IndexService implements IndexUseCase {
         List<Symbol> toStore = degraded ? symbols.stream().map(IndexService::retryable).toList() : symbols;
 
         store.atomically(() -> {
+            java.util.Set<String> names = changedNames(store.symbolsInFile(repo, rel), toStore);
+            if (reopened == null) {
+                store.reopenEdgesTo(repo, names);
+            } else {
+                reopened.addAll(names);   // batched: one reopen before the walk's resolve
+            }
             pruneRemovedSymbols(repo, rel, toStore);
             for (Symbol s : toStore) {
                 String text = skeletonText(s);
@@ -246,6 +255,18 @@ public class IndexService implements IndexUseCase {
         String name = dot >= 0 && dot < target.length() - 1 ? target.substring(dot + 1) : target;
         String recv = dot > 0 ? target.substring(0, dot) : null;
         return name.isBlank() ? null : CodeEdge.call(repo, srcId, name, arity, recv, paramTypes);
+    }
+
+    // Names whose candidate set changed (symbol added or removed): their callers must be re-resolved.
+    private static java.util.Set<String> changedNames(List<Symbol> before, List<Symbol> after) {
+        var beforeIds = before.stream().map(Symbol::id).collect(java.util.stream.Collectors.toSet());
+        var afterIds = after.stream().map(Symbol::id).collect(java.util.stream.Collectors.toSet());
+        java.util.Set<String> names = new java.util.HashSet<>();
+        after.stream().filter(s -> !beforeIds.contains(s.id()) && s.kind() != SymbolKind.MODULE)
+                .forEach(s -> names.add(s.name()));
+        before.stream().filter(s -> !afterIds.contains(s.id()) && s.kind() != SymbolKind.MODULE)
+                .forEach(s -> names.add(s.name()));
+        return names;
     }
 
     private void pruneRemovedSymbols(String repo, String rel, List<Symbol> current) {
