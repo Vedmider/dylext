@@ -1,0 +1,14 @@
+{
+  "name": "dylext-ts-parser",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Dylext TypeScript/JavaScript parser sidecar (neutral CONTRACT.md)",
+  "main": "parser_server.js",
+  "scripts": {
+    "start": "node parser_server.js",
+    "test": "node test_parser.js"
+  },
+  "dependencies": {
+    "typescript": "5.4.5"
+  }
+}

@@ -1,0 +1,21 @@
+package io.github.vedmider.dylext.domain.port.in;
+
+import io.github.vedmider.dylext.domain.port.out.LedgerStore.Totals;
+
+/** Inbound port: record what a tool served vs the whole-file baseline, and read running totals. */
+public interface LedgerUseCase {
+
+    /** Record a served response of {@code servedText} against reading whole {@code baselineText}. */
+    void recordServed(String taskId, String tool, String servedText, String baselineText);
+
+    /**
+     * Record a served response of {@code servedText} against a precomputed whole-source baseline of
+     * {@code baselineTokens} (e.g. a federated doc store that reports its full-document token size).
+     */
+    void recordServed(String taskId, String tool, String servedText, int baselineTokens);
+
+    /** Record a pure cost (e.g. summary build tokens): served=cost, baseline=0 → negative saving. */
+    void recordCost(String taskId, String tool, int costTokens);
+
+    Totals totals();
+}

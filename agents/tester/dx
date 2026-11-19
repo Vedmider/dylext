@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""Dylext tool client for the tester agent: dx <tool> ['{json args}'] | dx tools | dx raw '<json-rpc>'.
+
+Prints the tool result as JSON. Exit 0 = ok, 1 = JSON-RPC error (printed), 2 = server unreachable.
+"""
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+URL = "http://localhost:%s/mcp" % os.environ.get("DX_PORT", "18070")
+
+
+def post(payload):
+    req = urllib.request.Request(URL, data=payload.encode("utf-8"), method="POST",
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=int(os.environ.get("DX_TIMEOUT", "600"))) as r:
+            return r.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        return e.read().decode("utf-8")
+    except Exception as e:  # noqa: BLE001
+        sys.stderr.write("gateway/dylext unreachable at %s (%s): run bash agents/tester/gateway.sh up "
+                         "(or set DX_PORT=18090 for direct Dylext)\n" % (URL, e))
+        sys.exit(2)
+
+
+def main(argv):
+    if not argv:
+        sys.stderr.write(__doc__)
+        return 2
+    if argv[0] == "raw":
+        print(post(argv[1]))
+        return 0
+    if argv[0] == "tools":
+        res = json.loads(post('{"jsonrpc":"2.0","id":1,"method":"tools/list"}'))
+        for t in res["result"]["tools"]:
+            req = t.get("inputSchema", {}).get("required", [])
+            print("%-16s %-28s %s" % (t["name"], ",".join(req), t.get("description", "")))
+        return 0
+    args = json.loads(argv[1]) if len(argv) > 1 else {}
+    msg = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": argv[0], "arguments": args}}
+    res = json.loads(post(json.dumps(msg)))
+    if "error" in res:
+        print(json.dumps(res["error"], ensure_ascii=False))
+        return 1
+    content = res.get("result", {}).get("content", [])
+    body = content[0].get("json", content[0].get("text")) if content else res.get("result")
+    print(json.dumps(body, indent=1, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -1,0 +1,25 @@
+{
+  "symbols": [
+    {"kind": "CLASS", "name": "Greeter", "symbolPath": "Greeter",
+     "signature": "type Greeter struct", "docFirstLine": "Greeter greets people.",
+     "fqName": "sample.Greeter", "modifiers": ["exported"]},
+    {"kind": "FIELD", "name": "Prefix", "symbolPath": "Greeter.Prefix",
+     "signature": "Prefix string", "receiver": "Greeter", "returnType": "string"},
+    {"kind": "INTERFACE", "name": "Shouter", "symbolPath": "Shouter",
+     "signature": "type Shouter interface", "docFirstLine": "Shouter is a loud greeter.",
+     "fqName": "sample.Shouter", "modifiers": ["exported"]},
+    {"kind": "METHOD", "name": "Shout", "symbolPath": "Shouter#Shout",
+     "signature": "Shout(msg string) string", "receiver": "Shouter", "returnType": "string"},
+    {"kind": "FIELD", "name": "MaxLen", "symbolPath": "MaxLen",
+     "signature": "const MaxLen", "modifiers": ["exported", "const"]},
+    {"kind": "METHOD", "name": "Hello", "symbolPath": "Greeter#Hello",
+     "signature": "func (Greeter) Hello(name string) string",
+     "docFirstLine": "Hello returns a greeting.", "receiver": "Greeter",
+     "returnType": "string", "fqName": "sample.Greeter#Hello",
+     "modifiers": ["exported"], "callTargets": ["str.ToUpper", "fmt.Sprint"]},
+    {"kind": "METHOD", "name": "Plain", "symbolPath": "Plain",
+     "signature": "func Plain(a int, b int) int", "returnType": "int",
+     "fqName": "sample.Plain", "modifiers": ["exported"]}
+  ],
+  "moduleImports": ["fmt", "str strings"]
+}

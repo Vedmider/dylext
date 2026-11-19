@@ -1,0 +1,30 @@
+{
+  "symbols": [
+    {"kind": "FIELD", "name": "MAX_LEN", "symbolPath": "MAX_LEN", "signature": "MAX_LEN: number",
+     "modifiers": ["exported"]},
+    {"kind": "CLASS", "name": "UserId", "symbolPath": "UserId", "signature": "type UserId",
+     "modifiers": ["exported"]},
+    {"kind": "INTERFACE", "name": "Repo", "symbolPath": "Repo", "signature": "interface Repo",
+     "modifiers": ["exported"]},
+    {"kind": "METHOD", "name": "find", "symbolPath": "Repo#find(UserId)",
+     "signature": "find(UserId): string", "receiver": "Repo", "returnType": "string"},
+    {"kind": "ENUM", "name": "Status", "symbolPath": "Status", "signature": "enum Status",
+     "modifiers": ["exported"]},
+    {"kind": "CLASS", "name": "Greeter", "symbolPath": "Greeter", "signature": "class Greeter",
+     "docFirstLine": "Greets people.", "modifiers": ["exported"]},
+    {"kind": "FIELD", "name": "prefix", "symbolPath": "Greeter#prefix", "signature": "prefix: string",
+     "receiver": "Greeter", "returnType": "string"},
+    {"kind": "CONSTRUCTOR", "name": "constructor", "symbolPath": "Greeter#constructor(string)",
+     "signature": "constructor(string)", "receiver": "Greeter"},
+    {"kind": "METHOD", "name": "hello", "symbolPath": "Greeter#hello(string)",
+     "signature": "hello(string): string", "receiver": "Greeter", "returnType": "string",
+     "callTargets": ["name.toUpperCase"]},
+    {"kind": "METHOD", "name": "plain", "symbolPath": "plain(number,number)",
+     "signature": "function plain(number,number): number", "returnType": "number",
+     "modifiers": ["exported"], "callTargets": ["add"]},
+    {"kind": "METHOD", "name": "shout", "symbolPath": "shout(string)",
+     "signature": "const shout = (string): string =>", "returnType": "string",
+     "modifiers": ["exported"], "callTargets": ["name.toUpperCase"]}
+  ],
+  "moduleImports": ["fs", "os"]
+}
