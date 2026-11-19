@@ -300,3 +300,20 @@ While verifying F-019 I twice called `impact_of {"symbol":"topLevel"}` and my py
 app bug). The tool requires `symbolId` = the full `repo:path:symbolPath` (and function symbolPaths carry
 params, e.g. `helper(x)`), not a bare name. Not an app defect. Rule: on a non-PASS, print the raw
 response first and confirm it is a result, not an `{"code":-32602}` error, before classifying.
+
+
+
+## F-020 History rewrite (squash/amend+gc/force-push) leaves the index permanently and silently stale   [status: FIXED] [sev: H] [app: dylext]
+Scenario: DX18 — found live during the data-analytics review: `verify_claims` marked the real sestacon class
+`PgDocumentVersionStore` UNVERIFIED (false "hallucination" flag) and `repo_overview` reported head 08e07c90 /
+104 files / 833 symbols while the repo was at 9a6f4a6 / 116 files / 919 symbols. Same for dylext (0b7be28 vs 3ed9ad5).
+Repro: index a repo; rewrite history so the cursor commit is gone (amend + `reflog expire` + `gc --prune=now`,
+or a squashed re-clone); any read; `sync` → `-32603 UncheckedIOException: git diff-since on <root>`.
+Expected: sync detects the unreachable cursor and does a full re-index.   Actual: `JGitClient.changedFilesSince`
+throws on the missing object; `FreshnessGate` swallows it (best-effort), so every read keeps serving the old index
+forever, and `verify_claims` reports real code as unverified.
+Root cause: SyncService.sync only fell back to a full index when the cursor was absent, not when it was unreachable.
+Fix: `VcsClient.hasCommit(root, sha)` (JGit: resolve `^{commit}` + object-db `has`); SyncService does a full index
+when the cursor commit is gone. Tests: `JGitClientTest.hasCommitIsFalseForAnUnreachableShaAndTrueForHead`,
+`SyncServiceIT.syncFallsBackToFullIndexWhenTheCursorCommitNoLongerExists`, e2e `G05b`. Verified live: both repos
+re-synced to HEAD on first read; `PgDocumentVersionStore` now VERIFIED.

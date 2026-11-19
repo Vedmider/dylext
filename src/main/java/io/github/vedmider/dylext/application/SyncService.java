@@ -12,8 +12,9 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Incremental sync: first run (no cursor) does a full index; later runs re-index only the files
- * git reports changed since the stored cursor, then advance the cursor to HEAD.
+ * Incremental sync: first run (no cursor, or a cursor a history rewrite made unreachable) does a full
+ * index; later runs re-index only the files git reports changed since the stored cursor, then advance
+ * the cursor to HEAD.
  */
 @Service
 public class SyncService implements SyncUseCase {
@@ -37,7 +38,7 @@ public class SyncService implements SyncUseCase {
         String branch = vcs.currentBranch(root);
         Optional<String> cursor = store.repoCursor(repo);
 
-        if (!vcs.isRepo(root) || cursor.isEmpty()) {
+        if (!vcs.isRepo(root) || cursor.isEmpty() || !vcs.hasCommit(root, cursor.get())) {
             int changed = index.index(repo, root).filesIndexed();
             if (head != null) {
                 store.saveRepoCursor(repo, head);

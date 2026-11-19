@@ -24,7 +24,7 @@ NOT covered there. Sestacon API cases live in `e2e/sestacon_probe.py` (SA01-SA13
 | DX15 | non-Java repos: Go, Python, TypeScript with and without sidecar parsers; `languages` honesty | done-finding(F-009,F-010) |
 | DX16 | `ledger` totals after a mixed session match the sum of served spans | done-finding(F-006,F-007) |
 | DX17 | repo with path containing spaces, unicode, or very deep nesting | todo |
-| DX18 | `git gc`, shallow-to-deep fetch, force-push upstream, orphan branch checkout | todo |
+| DX18 | `git gc`, shallow-to-deep fetch, force-push upstream, orphan branch checkout | done-finding(F-020) |
 | DX19 | `answer` intent classification on ambiguous questions | todo |
 | DX20 | tools after the repo directory is moved or deleted | todo |
 | DX21 | stdio stdout purity when launched with defaults | done-finding(F-001) |

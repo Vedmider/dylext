@@ -22,6 +22,11 @@ public interface VcsClient {
     /** Paths (relative to {@code root}) changed between {@code oldSha} and HEAD (added/modified/deleted). */
     List<String> changedFilesSince(String root, String oldSha);
 
+    /** True if {@code sha} resolves to a commit in the repo (false after a history rewrite dropped it). */
+    default boolean hasCommit(String root, String sha) {
+        return true;
+    }
+
     /** Recent commits touching {@code pathFilter} (null/blank = all of {@code root}), newest first. */
     List<Commit> recentCommits(String root, String pathFilter, int limit);
 

@@ -147,6 +147,22 @@ public class JGitClient implements VcsClient {
     }
 
     @Override
+    public boolean hasCommit(String root, String sha) {
+        if (sha == null || sha.isBlank()) {
+            return false;
+        }
+        try (Located l = locate(root)) {
+            if (l == null) {
+                return false;
+            }
+            ObjectId id = l.repo().resolve(sha + "^{commit}");
+            return id != null && l.repo().getObjectDatabase().has(id);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    @Override
     public List<String> changedFilesSince(String root, String oldSha) {
         if (oldSha == null || oldSha.isBlank()) {
             return List.of();

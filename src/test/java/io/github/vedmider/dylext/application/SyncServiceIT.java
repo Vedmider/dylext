@@ -124,6 +124,25 @@ class SyncServiceIT {
     }
 
     @Test
+    void syncFallsBackToFullIndexWhenTheCursorCommitNoLongerExists(@TempDir Path dir) throws Exception {
+        String repo = "syn6";
+        try (Git git = initRepoWithTwoFiles(dir)) {
+            sync.sync(repo, dir.toString());
+            store.saveRepoCursor(repo, "0123456789abcdef0123456789abcdef01234567");
+            Files.writeString(dir.resolve("demo/Alpha.java"), ALPHA.replace("one", "rewritten"));
+            commit(git, "after history rewrite");
+
+            SyncResult r = sync.sync(repo, dir.toString());
+
+            assertThat(r.fullIndex()).isTrue();
+            assertThat(store.repoCursor(repo)).contains(git.getRepository().resolve("HEAD").getName());
+            assertThat(store.symbolsInFile(repo, "demo/Alpha.java"))
+                    .anyMatch(s -> s.name().equals("rewritten"))
+                    .noneMatch(s -> s.name().equals("one"));
+        }
+    }
+
+    @Test
     void syncIgnoresUncommittedEditsButExplicitIndexPicksThemUp(@TempDir Path dir) throws Exception {
         String repo = "syn5";
         try (Git ignored = initRepoWithTwoFiles(dir)) {

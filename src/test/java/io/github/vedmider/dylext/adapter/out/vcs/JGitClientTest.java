@@ -121,6 +121,18 @@ class JGitClientTest {
     }
 
     @Test
+    void hasCommitIsFalseForAnUnreachableShaAndTrueForHead() throws Exception {
+        try (Git g = init()) {
+            write("web/F.java", "a");
+            RevCommit c1 = commit(g, "init");
+
+            assertThat(vcs.hasCommit(web(), c1.getName())).isTrue();
+            assertThat(vcs.hasCommit(web(), "0123456789abcdef0123456789abcdef01234567")).isFalse();
+            assertThat(vcs.hasCommit(web(), "not-a-sha")).isFalse();
+        }
+    }
+
+    @Test
     void recentCommitsInASubfolderOnlyListCommitsTouchingIt() throws Exception {
         try (Git g = init()) {
             write("web/F.java", "a");

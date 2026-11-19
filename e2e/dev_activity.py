@@ -1330,6 +1330,21 @@ def g05(ctx, c):
     c.expect(new and not old, "new=%s old(stale)=%s" % (new, old))
 
 
+@case("G05b", "amend then gc prunes the indexed cursor commit (history rewrite)", "H",
+      "sync falls back to a full index; new symbol found, old gone")
+def g05b(ctx, c):
+    name, r = seeded(ctx, "g05b")
+    add_method(r, "F3.java", "g05bOld")
+    r.commit("add")
+    names(ctx.m, name, "g05bOld")
+    replace_in(r, "F3.java", "g05bOld", "g05bNew")
+    r.git("commit", "-q", "-a", "--amend", "--no-edit")
+    r.git("reflog", "expire", "--expire=now", "--all")
+    r.git("gc", "-q", "--prune=now")
+    new, old = has_exact(ctx.m, name, "g05bNew"), has_exact(ctx.m, name, "g05bOld")
+    c.expect(new and not old, "new=%s old(stale)=%s" % (new, old))
+
+
 @case("G06", "git reset --hard HEAD~1", "M", "symbols from the dropped commit gone")
 def g06(ctx, c):
     name, r = seeded(ctx, "g06")
