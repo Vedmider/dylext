@@ -21,9 +21,13 @@ public class FreshnessGate {
     private final VcsClient vcs;
     private final SyncUseCase sync;
     private final boolean onRead;
+    private final io.micrometer.core.instrument.MeterRegistry metrics;
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(FreshnessGate.class);
 
     public FreshnessGate(DigestStore store, VcsClient vcs, SyncUseCase sync,
-                         @Value("${dylext.freshness.on-read:true}") boolean onRead) {
+                         @Value("${dylext.freshness.on-read:true}") boolean onRead,
+                         io.micrometer.core.instrument.MeterRegistry metrics) {
+        this.metrics = metrics;
         this.store = store;
         this.vcs = vcs;
         this.sync = sync;
@@ -47,8 +51,11 @@ public class FreshnessGate {
                 || store.indexGeneration(repo) < io.github.vedmider.dylext.domain.model.IndexGeneration.CURRENT) {
             try {
                 sync.sync(repo, root.get());
-            } catch (RuntimeException ignored) {
-                // Freshness is best-effort; a sync failure must not break the read.
+            } catch (RuntimeException e) {
+                // Best-effort: the read proceeds on the old index, but the staleness must be visible.
+                metrics.counter("dylext.freshness.sync.failures", "repo", repo).increment();
+                log.warn("freshness sync failed for repo {} (index stays at {}): {}", repo,
+                        store.repoCursor(repo).orElse("none"), e.toString());
             }
         }
     }

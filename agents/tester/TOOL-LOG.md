@@ -25,3 +25,4 @@ FALLBACK | read sestacon application.yml / scripts/config.sh cache+retrieval def
 FALLBACK | symbols.kind column in schema | search_symbols (sql files unsupported, not indexed) | dylext skips .sql | scoped grep on src/main/resources/db/migration
 VIOLATION-AVOID | locating import lines/record decls for edit anchors | dx outline gives symbols not import lines | edit anchors need exact text | scoped grep on 2 files
 FALLBACK | symbols/edges columns (language, dst_recv) | n/a (.sql not indexed) | dylext skips sql | scoped grep migrations
+FALLBACK | locate gateway implementation | repo_overview/list_repos | gateway is a shell-launched component not in the indexed modules | scoped grep agents/tester/gateway.sh
