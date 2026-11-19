@@ -267,6 +267,52 @@ def sa19():
     return c1 == 200 and c2 == 200 and s1 == "NEW" and s2 == "UNCHANGED", "first=%s second=%s" % (s1, s2)
 
 
+def chat(question, roles=None):
+    h = {"Content-Type": "application/json"}
+    if roles:
+        h["X-Roles"] = roles
+    code, body = http("POST", "/api/chat", json.dumps({"question": question}).encode(), h, timeout=90)
+    try:
+        return code, json.loads(body)
+    except ValueError:
+        return code, {}
+
+
+@case("SA20", "H", "cached chat answer is not served to a role differing only in case (F-021)")
+def sa20():
+    word = uniq("vexnor")
+    ingest("%s.md" % word, "The bonus pool for the %s division is 412000 euros.\n" % word, acl=["FINANCE"])
+    q = "What is the bonus pool for the %s division?" % word
+    chat(q, "FINANCE")
+    _, other = chat(q, "finance")
+    leaked = "412" in json.dumps(other) or other.get("cached")
+    return not leaked, "lowercase role got cached=%s sources=%s" % (other.get("cached"), other.get("sources"))
+
+
+@case("SA21", "H", "chat after deleting the source document does not serve the cached answer (F-022)")
+def sa21():
+    word = uniq("zorblat")
+    name = "%s.md" % word
+    ingest(name, "The %s activation code is 7781-QX.\n" % word)
+    chat("What is the %s activation code?" % word)
+    http("DELETE", "/api/documents/%s" % name)
+    _, after = chat("what's the %s activation code?" % word)
+    stale = name in (after.get("sources") or []) or "7781" in json.dumps(after)
+    return not stale, "after delete cached=%s sources=%s" % (after.get("cached"), after.get("sources"))
+
+
+@case("SA22", "H", "re-ingesting identical content with new aclTags applies the ACL (F-023)")
+def sa22():
+    word = uniq("klendar")
+    name = "%s.md" % word
+    text = "The %s merger closing date is 14 March.\n" % word
+    ingest(name, text)
+    ingest(name, text, acl=["LEGAL"])
+    _, anon = retrieve("%s merger closing date" % word)
+    _, legal = retrieve("%s merger closing date" % word, roles="LEGAL")
+    return not has(anon, word) and has(legal, word), "anon=%s legal=%s" % (has(anon, word), has(legal, word))
+
+
 def main():
     global BASE
     ap = argparse.ArgumentParser()

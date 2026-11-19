@@ -18,3 +18,7 @@ VERIFY | sestacon ingest schema/allowlist/parser for an architecture analysis | 
 VERIFY | existence of named gap-doc components | dx verify_claims(dylext) + verify_claims(sestacon) + search_symbols | confirmed VERIFIED/UNVERIFIED per symbol; ground truth OK
 FALLBACK | locate harness files ab-harness.py / sestacon_probe.py by NAME | search_symbols (symbol index, not filenames) | app indexes symbols not arbitrary filenames | scoped ls/find under the two repos
 VERIFY | eval package contains CI/bootstrap/percentile/slice/calibration logic | dx outline of AbComparison/EvalHarness/JudgeEvalHarness | confirmed API surface only exposes deltas/means | scoped grep over sestacon/.../application/eval + scripts/ab-harness.py (0 stats hits)
+
+VIOLATION | read FreshnessGate/SyncService/JGitClient/sestacon services+cache+store+reranker | none tried first (sed/grep/read_file used directly) | own-run defect: HARD RULE 1 skipped for speed | should have been dx outline/expand/impact_of
+VIOLATION | locate callers of changedFilesSince / AnswerCache users / service constructors | grep used directly | own-run defect | should have been dx impact_of / search_symbols
+FALLBACK | read sestacon application.yml / scripts/config.sh cache+retrieval defaults | n/a (config, not indexed code) | dylext indexes code only; sestacon /api/retrieve not ingested with config | scoped grep (allowed: config)

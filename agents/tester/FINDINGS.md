@@ -317,3 +317,22 @@ Fix: `VcsClient.hasCommit(root, sha)` (JGit: resolve `^{commit}` + object-db `ha
 when the cursor commit is gone. Tests: `JGitClientTest.hasCommitIsFalseForAnUnreachableShaAndTrueForHead`,
 `SyncServiceIT.syncFallsBackToFullIndexWhenTheCursorCommitNoLongerExists`, e2e `G05b`. Verified live: both repos
 re-synced to HEAD on first read; `PgDocumentVersionStore` now VERIFIED.
+
+
+## F-021 Semantic answer cache leaks across roles that differ only in case   [status: FIXED] [sev: H] [app: sestacon]
+Repro: ingest doc with aclTags=FINANCE; chat as `X-Roles: FINANCE`; chat as `X-Roles: finance` → cached=true, secret
+answer + source, although `/api/retrieve` as `finance` returns []. Root cause: `RedisAnswerCache.roleKey` lowercased and
+sanitized roles (`team.a`==`team_a`) while the store ACL match is exact. Fix: exact, injective base64url role key.
+Tests: `RedisAnswerCacheTest.roleKeysAreCaseSensitiveCollisionFreeAndOrderInsensitive`, probe SA20. Commit sestacon a1dd0d7.
+
+## F-022 Chat serves answers from deleted/changed documents until cache TTL   [status: FIXED] [sev: H] [app: sestacon]
+Repro: ingest; chat; DELETE the document; paraphrased chat → cached=true, answer + source of the deleted doc.
+Root cause: nothing invalidated `AnswerCache` on ingest/re-ingest/delete. Fix: `AnswerCache.invalidateAll()` (Redis:
+generation key in the index key), called by DocumentIngestion/ChunkIngestion/DeleteDocument services on corpus change.
+Tests: `DocumentIngestionServiceTest.corpusChangeInvalidatesTheAnswerCacheButAnUnchangedReingestDoesNot`,
+`DeleteDocumentServiceTest`, `RedisAnswerCacheTest.invalidateAllMovesLookupsToANewGeneration`, probe SA21.
+
+## F-023 Re-ingesting identical content with new aclTags is skipped; document stays public   [status: FIXED] [sev: H] [app: sestacon]
+Repro: ingest klendar.md (public); re-ingest with aclTags=LEGAL → status UNCHANGED; anon retrieve still returns it.
+Root cause: version dedup hashed content only. Fix: `ContentHash.ofSection(content, aclTags)` (public hashes unchanged).
+Tests: `DocumentIngestionServiceTest.reingestingIdenticalContentWithNewAclTagsRestoresTheChunksWithTheNewAcl`, probe SA22.
