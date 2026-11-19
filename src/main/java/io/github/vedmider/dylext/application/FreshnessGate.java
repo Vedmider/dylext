@@ -43,7 +43,8 @@ public class FreshnessGate {
         if (head == null) {
             return;
         }
-        if (!head.equals(store.repoCursor(repo).orElse(null))) {
+        if (!head.equals(store.repoCursor(repo).orElse(null))
+                || store.indexGeneration(repo) < io.github.vedmider.dylext.domain.model.IndexGeneration.CURRENT) {
             try {
                 sync.sync(repo, root.get());
             } catch (RuntimeException ignored) {

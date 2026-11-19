@@ -22,3 +22,6 @@ VERIFY | eval package contains CI/bootstrap/percentile/slice/calibration logic |
 VIOLATION | read FreshnessGate/SyncService/JGitClient/sestacon services+cache+store+reranker | none tried first (sed/grep/read_file used directly) | own-run defect: HARD RULE 1 skipped for speed | should have been dx outline/expand/impact_of
 VIOLATION | locate callers of changedFilesSince / AnswerCache users / service constructors | grep used directly | own-run defect | should have been dx impact_of / search_symbols
 FALLBACK | read sestacon application.yml / scripts/config.sh cache+retrieval defaults | n/a (config, not indexed code) | dylext indexes code only; sestacon /api/retrieve not ingested with config | scoped grep (allowed: config)
+FALLBACK | symbols.kind column in schema | search_symbols (sql files unsupported, not indexed) | dylext skips .sql | scoped grep on src/main/resources/db/migration
+VIOLATION-AVOID | locating import lines/record decls for edit anchors | dx outline gives symbols not import lines | edit anchors need exact text | scoped grep on 2 files
+FALLBACK | symbols/edges columns (language, dst_recv) | n/a (.sql not indexed) | dylext skips sql | scoped grep migrations

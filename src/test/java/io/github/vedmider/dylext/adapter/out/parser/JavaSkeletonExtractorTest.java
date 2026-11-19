@@ -76,10 +76,10 @@ class JavaSkeletonExtractorTest {
         List<String> calls = extractor.extract("demo", "d/Caller.java", src).stream()
                 .filter(s -> s.name().equals("run")).findFirst().orElseThrow().callTargets();
 
-        assertThat(calls).contains("greet/1#String", "greet/1#int", "pair/2#String,int",
-                "make/1#Thing", "none/0");
+        assertThat(calls).contains("this.greet/1#String", "this.greet/1#int", "this.pair/2#String,int",
+                "this.make/1#Thing", "this.none/0", "Thing/0");
         // one un-inferable arg -> no type hint at all, falls back to bare name/arity
-        assertThat(calls).contains("mixed/2").doesNotContain("mixed/2#String");
+        assertThat(calls).contains("this.mixed/2").doesNotContain("this.mixed/2#String");
     }
 
     @Test

@@ -15,6 +15,7 @@ import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -204,10 +205,27 @@ public class JavaSkeletonExtractor implements io.github.vedmider.dylext.domain.p
         return "";
     }
 
+    // "Type." for a type scope (List.of, java.util.Map.of), "this." for an unqualified/this call, "" for variables.
+    private static String typeReceiver(MethodCallExpr call) {
+        if (call.getScope().isEmpty() || call.getScope().get() instanceof com.github.javaparser.ast.expr.ThisExpr) {
+            return "this.";
+        }
+        String name = call.getScope().map(scope -> scope instanceof com.github.javaparser.ast.expr.NameExpr n
+                ? n.getNameAsString()
+                : scope instanceof com.github.javaparser.ast.expr.FieldAccessExpr f ? f.getNameAsString() : null)
+                .orElse(null);
+        boolean typeLike = name != null && Character.isUpperCase(name.charAt(0))
+                && !name.equals(name.toUpperCase(java.util.Locale.ROOT));
+        return typeLike ? name + "." : "";
+    }
+
     private static List<String> callTargets(com.github.javaparser.ast.Node node) {
         Set<String> targets = new LinkedHashSet<>();
         node.findAll(MethodCallExpr.class).forEach(call ->
-                targets.add(call.getNameAsString() + "/" + call.getArguments().size()
+                targets.add(typeReceiver(call) + call.getNameAsString() + "/" + call.getArguments().size()
+                        + inferredParamTypes(call.getArguments())));
+        node.findAll(ObjectCreationExpr.class).forEach(call ->
+                targets.add(call.getType().getNameAsString() + "/" + call.getArguments().size()
                         + inferredParamTypes(call.getArguments())));
         return new ArrayList<>(targets);
     }

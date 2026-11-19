@@ -1,5 +1,6 @@
 package io.github.vedmider.dylext.application;
 
+import io.github.vedmider.dylext.domain.model.IndexGeneration;
 import io.github.vedmider.dylext.domain.port.in.IndexUseCase;
 import io.github.vedmider.dylext.domain.port.in.SyncUseCase;
 import io.github.vedmider.dylext.domain.port.out.DigestStore;
@@ -38,11 +39,13 @@ public class SyncService implements SyncUseCase {
         String branch = vcs.currentBranch(root);
         Optional<String> cursor = store.repoCursor(repo);
 
-        if (!vcs.isRepo(root) || cursor.isEmpty() || !vcs.hasCommit(root, cursor.get())) {
+        if (!vcs.isRepo(root) || cursor.isEmpty() || !vcs.hasCommit(root, cursor.get())
+                || store.indexGeneration(repo) < IndexGeneration.CURRENT) {
             int changed = index.index(repo, root).filesIndexed();
             if (head != null) {
                 store.saveRepoCursor(repo, head);
             }
+            store.saveIndexGeneration(repo, IndexGeneration.CURRENT);
             return new SyncResult(repo, null, head, changed, true, branch);
         }
 

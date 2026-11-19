@@ -2,6 +2,7 @@ package io.github.vedmider.dylext.application;
 
 import io.github.vedmider.dylext.domain.model.CodeEdge;
 import io.github.vedmider.dylext.domain.model.Hashing;
+import io.github.vedmider.dylext.domain.model.IndexGeneration;
 import io.github.vedmider.dylext.domain.model.Skeleton;
 import io.github.vedmider.dylext.domain.model.Symbol;
 import io.github.vedmider.dylext.domain.model.SymbolKind;
@@ -63,6 +64,7 @@ public class IndexService implements IndexUseCase {
 
         // re-pointing a repo name at another folder must not leave the old folder's symbols behind
         String replaced = store.repoRoot(repo).filter(old -> !old.equals(rootStr)).orElse(null);
+        boolean rebuild = store.indexGeneration(repo) < IndexGeneration.CURRENT;   // older extractor: re-extract all
         if (replaced != null) {
             store.clearRepo(repo);
         }
@@ -80,11 +82,12 @@ public class IndexService implements IndexUseCase {
                 case UNREACHABLE -> tally.unreachable.merge(routing.key(), 1, Integer::sum);
                 case PARSE -> {
                     tally.scanned++;
-                    tally.record(rel, indexFileAbsolute(repo, base.resolve(rel), rel, routing.extractor()));
+                    tally.record(rel, indexFileAbsolute(repo, base.resolve(rel), rel, routing.extractor(), rebuild));
                 }
             }
         }
         store.resolvePendingEdges(repo);
+        store.saveIndexGeneration(repo, IndexGeneration.CURRENT);
 
         String head = vcs.headSha(rootStr);
         if (head != null) {
@@ -116,7 +119,7 @@ public class IndexService implements IndexUseCase {
             return 0;
         }
         FileOutcome outcome = indexFileAbsolute(repo, Path.of(root).resolve(relativePath), relativePath,
-                routing.extractor());
+                routing.extractor(), false);
         store.resolvePendingEdges(repo);
         return Math.max(outcome.symbols, 0);
     }
@@ -136,7 +139,8 @@ public class IndexService implements IndexUseCase {
         }
     }
 
-    private FileOutcome indexFileAbsolute(String repo, Path file, String rel, SkeletonExtractor extractor) {
+    private FileOutcome indexFileAbsolute(String repo, Path file, String rel, SkeletonExtractor extractor,
+                                          boolean rebuild) {
         String source;
         try {
             source = readSource(file);
@@ -145,7 +149,7 @@ public class IndexService implements IndexUseCase {
         }
         String fileHash = Hashing.sha256(source);
         Optional<String> existing = store.fileContentHash(repo, rel);
-        if (existing.isPresent() && existing.get().equals(fileHash)) {
+        if (!rebuild && existing.isPresent() && existing.get().equals(fileHash)) {
             return FileOutcome.UNCHANGED;
         }
         List<Symbol> symbols;

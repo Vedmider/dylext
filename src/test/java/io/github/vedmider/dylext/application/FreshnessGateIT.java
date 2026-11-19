@@ -82,4 +82,20 @@ class FreshnessGateIT {
                     .anyMatch(d -> d.name().equals("three"));
         }
     }
+
+    @Test
+    void anIndexFromAnOlderGenerationIsRebuiltOnTheNextReadWithoutANewCommit(@TempDir Path dir) throws Exception {
+        String repo = "fresh3";
+        try (Git git = initRepo(dir)) {
+            Files.writeString(dir.resolve("Alpha.java"), "class Alpha { void one() {} }");
+            commit(git, "add Alpha");
+            index.index(repo, dir.toString());
+            store.saveIndexGeneration(repo, io.github.vedmider.dylext.domain.model.IndexGeneration.CURRENT - 1);
+
+            retrieve.searchSymbols(repo, "one", 5);
+
+            assertThat(store.indexGeneration(repo))
+                    .isEqualTo(io.github.vedmider.dylext.domain.model.IndexGeneration.CURRENT);
+        }
+    }
 }

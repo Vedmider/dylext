@@ -61,6 +61,14 @@ public interface DigestStore {
     /** Persist the git sha last indexed for a repo (incremental-sync cursor). */
     void saveRepoCursor(String repo, String sha);
 
+    /** Generation that built the repo's index (0 = unknown/pre-versioning). */
+    default int indexGeneration(String repo) {
+        return io.github.vedmider.dylext.domain.model.IndexGeneration.CURRENT;
+    }
+
+    default void saveIndexGeneration(String repo, int generation) {
+    }
+
     Optional<String> repoCursor(String repo);
 
     /** Replace all outgoing edges for a source symbol (called on (re)index of its file). */

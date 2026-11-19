@@ -1,5 +1,6 @@
 package io.github.vedmider.dylext.application;
 
+import io.github.vedmider.dylext.domain.model.IndexGeneration;
 import io.github.vedmider.dylext.domain.model.Symbol;
 import io.github.vedmider.dylext.domain.port.in.IndexUseCase;
 import io.github.vedmider.dylext.domain.port.in.SyncUseCase;
@@ -139,6 +140,22 @@ class SyncServiceIT {
             assertThat(store.symbolsInFile(repo, "demo/Alpha.java"))
                     .anyMatch(s -> s.name().equals("rewritten"))
                     .noneMatch(s -> s.name().equals("one"));
+        }
+    }
+
+    @Test
+    void anIndexBuiltByAnOlderExtractorGenerationIsFullyRebuiltOnSync(@TempDir Path dir) throws Exception {
+        String repo = "syn7";
+        try (Git ignored = initRepoWithTwoFiles(dir)) {
+            sync.sync(repo, dir.toString());
+            assertThat(store.indexGeneration(repo)).isEqualTo(IndexGeneration.CURRENT);
+            store.saveIndexGeneration(repo, IndexGeneration.CURRENT - 1);
+
+            SyncResult r = sync.sync(repo, dir.toString());
+
+            assertThat(r.fullIndex()).isTrue();
+            assertThat(r.filesChanged()).as("every file re-extracted, not skipped as unchanged").isEqualTo(2);
+            assertThat(store.indexGeneration(repo)).isEqualTo(IndexGeneration.CURRENT);
         }
     }
 

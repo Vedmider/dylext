@@ -204,6 +204,17 @@ public class PgDigestStore implements DigestStore {
     }
 
     @Override
+    public int indexGeneration(String repo) {
+        return jdbc.query("SELECT index_generation FROM repo_state WHERE repo=?",
+                (rs, i) -> rs.getInt(1), repo).stream().findFirst().orElse(0);
+    }
+
+    @Override
+    public void saveIndexGeneration(String repo, int generation) {
+        jdbc.update("UPDATE repo_state SET index_generation=? WHERE repo=?", generation, repo);
+    }
+
+    @Override
     public Optional<String> repoCursor(String repo) {
         return jdbc.query("SELECT git_cursor FROM repo_state WHERE repo=?",
                 (rs, i) -> rs.getString(1), repo).stream()
@@ -228,7 +239,7 @@ public class PgDigestStore implements DigestStore {
                     UPDATE edges e SET dst_id = s.id
                     FROM symbols s
                     WHERE e.dst_id IS NULL AND e.repo = ? AND s.repo = e.repo
-                      AND s.name = e.dst_name AND s.symbol_path <> '<module>'
+                      AND s.name = e.dst_name AND s.symbol_path <> '<module>' AND s.kind <> 'FIELD'
                     """, repo);
             return;
         }
@@ -241,6 +252,7 @@ public class PgDigestStore implements DigestStore {
                 UPDATE edges e SET dst_id = (
                     SELECT s.id FROM symbols s
                     WHERE s.repo = e.repo AND s.symbol_path <> '<module>' AND s.name = e.dst_name
+                      AND s.kind <> 'FIELD'
                       AND (e.dst_arity IS NULL OR s.arity IS NULL OR s.arity = e.dst_arity)
                     ORDER BY (s.arity IS NOT DISTINCT FROM e.dst_arity) DESC,
                              (e.dst_recv IS NOT NULL AND s.symbol_path LIKE e.dst_recv || '#%') DESC,
@@ -248,7 +260,8 @@ public class PgDigestStore implements DigestStore {
                     LIMIT 1)
                 WHERE e.dst_id IS NULL AND e.repo = ?
                   AND EXISTS (SELECT 1 FROM symbols s2
-                              WHERE s2.repo = e.repo AND s2.name = e.dst_name AND s2.symbol_path <> '<module>')
+                              WHERE s2.repo = e.repo AND s2.name = e.dst_name AND s2.symbol_path <> '<module>'
+                                AND s2.kind <> 'FIELD')
                 """, repo);
     }
 
@@ -259,24 +272,38 @@ public class PgDigestStore implements DigestStore {
      */
     private void resolveTypeAware(String repo) {
         List<PendingEdge> pending = jdbc.query(
-                "SELECT id, dst_name, dst_arity, dst_param_types FROM edges "
-                        + "WHERE dst_id IS NULL AND repo = ?",
+                "SELECT e.id, e.dst_name, e.dst_arity, e.dst_param_types, e.dst_recv, s.language, s.symbol_path "
+                        + "FROM edges e "
+                        + "JOIN symbols s ON s.id = e.src_id WHERE e.dst_id IS NULL AND e.repo = ?",
                 (rs, i) -> new PendingEdge(rs.getLong("id"), rs.getString("dst_name"),
-                        (Integer) rs.getObject("dst_arity"), rs.getString("dst_param_types")),
+                        (Integer) rs.getObject("dst_arity"), rs.getString("dst_param_types"),
+                        rs.getString("dst_recv"), rs.getString("language"), rs.getString("symbol_path")),
                 repo);
         for (PendingEdge e : pending) {
             List<Candidate> candidates = jdbc.query(
-                    "SELECT id, symbol_path, arity FROM symbols "
-                            + "WHERE repo = ? AND name = ? AND symbol_path <> '<module>'",
+                    "SELECT id, symbol_path, arity, kind FROM symbols WHERE repo = ? AND name = ? "
+                            + "AND symbol_path <> '<module>' AND kind <> 'FIELD' AND language = ?",
                     (rs, i) -> new Candidate(rs.getString("id"), rs.getString("symbol_path"),
-                            (Integer) rs.getObject("arity")),
-                    repo, e.dstName());
+                            (Integer) rs.getObject("arity"), rs.getString("kind")),
+                    repo, e.dstName(), e.language());
+            if (typeLike(e.recv())) {
+                candidates = candidates.stream().filter(c -> c.ownedBy(e.recv())).toList();   // none = external type
+            } else if ("this".equals(e.recv())) {
+                List<Candidate> own = candidates.stream().filter(c -> c.enclosing(e.srcPath())).toList();
+                candidates = own.isEmpty() ? candidates : own;   // none = inherited from a supertype
+            }
+            if (candidates.stream().anyMatch(Candidate::callable)) {
+                candidates = candidates.stream().filter(Candidate::callable).toList();   // ctor beats its class
+            }
             if (candidates.isEmpty()) {
                 continue;   // truly unresolved: leave pending (as in arity mode)
             }
             List<Candidate> byArity = candidates.stream()
                     .filter(c -> e.arity() == null || c.arity() == null || c.arity().equals(e.arity()))
                     .toList();
+            if (byArity.isEmpty() && "java".equalsIgnoreCase(e.language())) {
+                continue;   // Java arity is exact: no candidate fits, so the target is external
+            }
             List<Candidate> pool = byArity.isEmpty() ? candidates : byArity;
             if (pool.size() == 1) {
                 jdbc.update("UPDATE edges SET dst_id = ? WHERE id = ?", pool.get(0).id(), e.id());
@@ -316,10 +343,35 @@ public class PgDigestStore implements DigestStore {
         return symbolPath.substring(open + 1, close).trim();
     }
 
-    private record PendingEdge(long id, String dstName, Integer arity, String paramTypes) {
+    private static boolean typeLike(String recv) {
+        return recv != null && !recv.isEmpty() && Character.isUpperCase(recv.charAt(0)) && !recv.contains(".")
+                && !recv.equals(recv.toUpperCase(java.util.Locale.ROOT));
     }
 
-    private record Candidate(String id, String symbolPath, Integer arity) {
+    private record PendingEdge(long id, String dstName, Integer arity, String paramTypes, String recv,
+                               String language, String srcPath) {
+    }
+
+    private record Candidate(String id, String symbolPath, Integer arity, String kind) {
+        boolean callable() {
+            return "METHOD".equals(kind) || "CONSTRUCTOR".equals(kind);
+        }
+
+        boolean ownedBy(String type) {
+            String owner = owner(symbolPath);
+            return owner.equals(type) || owner.endsWith("." + type);
+        }
+
+        boolean enclosing(String callerPath) {
+            String mine = owner(symbolPath);
+            String caller = owner(callerPath);
+            return caller.equals(mine) || caller.startsWith(mine + ".");
+        }
+
+        private static String owner(String path) {
+            int hash = path.indexOf('#');
+            return hash >= 0 ? path.substring(0, hash) : path;
+        }
     }
 
     /** Param count encoded in a method/constructor symbolPath "...#name(T1,T2)"; null when no parens. */

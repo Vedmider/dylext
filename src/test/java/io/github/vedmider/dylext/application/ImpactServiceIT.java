@@ -199,4 +199,128 @@ class ImpactServiceIT {
         assertThat(str.ambiguousOverload()).isTrue();
         assertThat(in.ambiguousOverload()).isTrue();
     }
+
+    @Test
+    void aFieldNamedLikeACalledMethodIsNeverACallTarget(@TempDir Path dir) throws IOException {
+        Files.createDirectories(dir.resolve("demo"));
+        Files.writeString(dir.resolve("demo/Port.java"),
+                "package demo;\npublic interface Port { String retrieve(String q); }\n");
+        Files.writeString(dir.resolve("demo/Harness.java"), """
+                package demo;
+                public class Harness {
+                    private final Port retrieve;
+                    public Harness(Port retrieve) { this.retrieve = retrieve; }
+                    public int size() { return 1; }
+                }
+                """);
+        Files.writeString(dir.resolve("demo/Service.java"), """
+                package demo;
+                public class Service {
+                    private final Port retrieve;
+                    public Service(Port retrieve) { this.retrieve = retrieve; }
+                    public String answer(String q) { return retrieve.retrieve(q); }
+                }
+                """);
+        index.index("fld", dir.toString());
+
+        Impact harness = impact.impactOf("fld:demo/Harness.java:demo.Harness");
+
+        assertThat(harness.callers()).noneMatch(c -> c.contains("demo.Service#answer"));
+        assertThat(impact.impactOf("fld:demo/Port.java:demo.Port#retrieve(String)").callers())
+                .contains("fld:demo/Service.java:demo.Service#answer(String)");
+    }
+
+    @Test
+    void constructorCallsAreCallersOfTheClass(@TempDir Path dir) throws IOException {
+        Files.createDirectories(dir.resolve("demo"));
+        Files.writeString(dir.resolve("demo/Point.java"),
+                "package demo;\npublic record Point(int x, int y) { }\n");
+        Files.writeString(dir.resolve("demo/Box.java"), """
+                package demo;
+                public class Box {
+                    private final int w;
+                    public Box(int w) { this.w = w; }
+                }
+                """);
+        Files.writeString(dir.resolve("demo/Factory.java"), """
+                package demo;
+                public class Factory {
+                    public Point origin() { return new Point(0, 0); }
+                    public Box unit() { return new Box(1); }
+                }
+                """);
+        index.index("ctor", dir.toString());
+
+        assertThat(impact.impactOf("ctor:demo/Point.java:demo.Point").callers())
+                .contains("ctor:demo/Factory.java:demo.Factory#origin()");
+        assertThat(impact.impactOf("ctor:demo/Box.java:demo.Box").callers())
+                .contains("ctor:demo/Factory.java:demo.Factory#unit()");
+    }
+
+    @Test
+    void aCallOnAnExternalTypeIsNotBoundToASameNamedRepoMethod(@TempDir Path dir) throws IOException {
+        Files.createDirectories(dir.resolve("demo"));
+        Files.writeString(dir.resolve("demo/Report.java"), """
+                package demo;
+                public class Report {
+                    public static Report of(String row) { return new Report(); }
+                }
+                """);
+        Files.writeString(dir.resolve("demo/Caller.java"), """
+                package demo;
+                public class Caller {
+                    public Object external() { return java.util.List.of("a"); }
+                    public Object externalShort() { return Map.of("a"); }
+                    public Report internal() { return Report.of("x"); }
+                }
+                """);
+        index.index("ext", dir.toString());
+
+        assertThat(impact.impactOf("ext:demo/Report.java:demo.Report#of(String)").callers())
+                .contains("ext:demo/Caller.java:demo.Caller#internal()")
+                .noneMatch(c -> c.contains("#external"));
+    }
+
+    @Test
+    void anUnqualifiedCallPrefersTheCallersOwnClass(@TempDir Path dir) throws IOException {
+        Files.createDirectories(dir.resolve("demo"));
+        Files.writeString(dir.resolve("demo/Alpha.java"), """
+                package demo;
+                public class Alpha {
+                    static int of(String s) { return 1; }
+                    int use() { return of("x"); }
+                }
+                """);
+        Files.writeString(dir.resolve("demo/Beta.java"), """
+                package demo;
+                public class Beta {
+                    static int of(String s) { return 2; }
+                }
+                """);
+        index.index("own", dir.toString());
+
+        assertThat(impact.impactOf("own:demo/Alpha.java:demo.Alpha#of(String)").callers())
+                .contains("own:demo/Alpha.java:demo.Alpha#use()");
+        assertThat(impact.impactOf("own:demo/Beta.java:demo.Beta#of(String)").callers()).isEmpty();
+    }
+
+    @Test
+    void aCallWhoseArityMatchesNoCandidateIsLeftUnresolved(@TempDir Path dir) throws IOException {
+        Files.createDirectories(dir.resolve("demo"));
+        Files.writeString(dir.resolve("demo/Harness.java"), """
+                package demo;
+                public class Harness {
+                    double score(String q, int k) { return 0; }
+                }
+                """);
+        Files.writeString(dir.resolve("demo/Caller.java"), """
+                package demo;
+                public class Caller {
+                    double read(java.util.OptionalDouble hit) { return hit.score(); }
+                }
+                """);
+        index.index("ari", dir.toString());
+
+        assertThat(impact.impactOf("ari:demo/Harness.java:demo.Harness#score(String,int)").callers()).isEmpty();
+    }
 }
