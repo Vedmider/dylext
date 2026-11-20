@@ -1,5 +1,10 @@
 # Dylext
 
+[![CI](https://github.com/Vedmider/dylext/actions/workflows/ci.yml/badge.svg)](https://github.com/Vedmider/dylext/actions/workflows/ci.yml)
+[![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://adoptium.net)
+[![Spring Boot 3.3](https://img.shields.io/badge/Spring%20Boot-3.3-brightgreen.svg)](https://spring.io/projects/spring-boot)
+[![License: BSL 1.1](https://img.shields.io/badge/license-BSL--1.1-blue.svg)](LICENSE)
+
 An AI code-context **MCP server**. It keeps a codebase's **static context** (compressed code
 skeletons: names + signatures + call targets) and **dynamic context** (git history + uncommitted
 working-tree changes) in Postgres, and serves them to an AI agent **digest-first**: cheap skeletons

@@ -5,3 +5,8 @@ target/
 .DS_Store
 
 .local.env
+
+# transient
+__pycache__/
+*.bak
+parsers/*/node_modules/

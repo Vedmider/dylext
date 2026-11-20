@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  java:
+    name: Java — Maven verify (unit + Testcontainers IT)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      # ubuntu-latest ships a running Docker daemon, so the failsafe pgvector
+      # Testcontainers integration tests run without extra setup.
+      - name: Build, unit + integration tests
+        run: mvn -B -ntp clean verify
+
+  parser-go:
+    name: Go parser sidecar
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: parsers/go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: false
+      - name: gofmt (must be clean)
+        run: test -z "$(gofmt -l .)" || { echo 'gofmt needed on:'; gofmt -l .; exit 1; }
+      - name: Test
+        run: go test ./...
+
+  parser-ts:
+    name: TypeScript parser sidecar
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: parsers/ts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: parsers/ts/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  python-e2e:
+    name: Python harness — syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # The e2e/probe harnesses need a live stack to run; CI only guards their syntax.
+      - name: Compile-check harness scripts
+        run: python -m compileall -q e2e
