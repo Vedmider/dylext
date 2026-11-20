@@ -64,3 +64,21 @@ NOT covered there. Sestacon API cases live in `e2e/sestacon_probe.py` (SA01-SA13
 
 ## Agent tooling gaps
 Record every FALLBACK from `TOOL-LOG.md` here as `AT-nnn` with the missing capability.
+
+
+## Pressure-test regressions (PT) — from the API decomposition attack (agents/tester/analysis/)
+Confirmed defects promoted to repeatable regression cases. Status `open-regression` = test exists and
+currently GAPs (red); it flips to `done-pass` once the fix lands and then guards against re-regression.
+| ID | Scenario | Harness case | Status |
+|---|---|---|---|
+| PT-01 | ingest garbage/empty extraction stored as a 1.0-scoring retrievable chunk (no post-parse text gate) | sestacon_probe SA23 | fixed(sestacon 1fcc3a7) |
+| PT-02 | `/api/documents` has no size/count cap (4 MB chunk + 3000 chunks both 200) | sestacon_probe SA24 | fixed(sestacon 6a7a07c) |
+| PT-03 | forbidden `DELETE` returns 403 echoing the id = existence/ACL oracle vs unknown-id 200 | sestacon_probe SA25 | fixed(sestacon f75af30) |
+| PT-04 | `GET /api/documents/{id}/version` leaks docHash/size/section-hashes of a restricted doc to anon | sestacon_probe SA26 | fixed(sestacon f75af30) |
+| PT-05 | Dylext serves a stale index after a freshness-sync failure with no `stale` signal in the envelope | (needs fault-injection; harness gap AT-PT05) | todo |
+| PT-06 | `impact_of` reports zero callers for varargs methods (strict arity drops call arity != declared) | dev_activity PT06 | fixed(dylext 37c56b8) |
+| PT-07 | `search_symbols` description says "exact lexical" but matching is fuzzy/token-split | dev_activity PT07 | fixed(dylext 37c56b8) |
+
+Note: PT-05 has no cheap deterministic case yet — inducing a sync failure (reachable HEAD + failing
+diff-since) needs a fault-injection hook the harness does not expose. Logged as agent tooling gap
+AT-PT05; add the regression case together with the fix.

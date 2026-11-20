@@ -313,6 +313,59 @@ def sa22():
     return not has(anon, word) and has(legal, word), "anon=%s legal=%s" % (has(anon, word), has(legal, word))
 
 
+@case("SA23", "M", "garbage/empty extraction is not stored as a retrievable chunk (PT-01)")
+def sa23():
+    word = uniq("garbagepdf")
+    blob = bytes(bytearray((i * 37 + 11) % 256 for i in range(2048)))  # non-text bytes
+    c, body = ingest_json("%s.pdf" % word, blob, "application/pdf")
+    code, hits = retrieve(word)  # a query of the filename stem must NOT surface an empty-body chunk
+    stored_empty = has(hits, word)
+    return c == 200 and not stored_empty, "ingest=%s retrievedEmptyChunk=%s" % (c, stored_empty)
+
+
+@case("SA24", "M", "/api/documents enforces a size/count limit (PT-02)")
+def sa24():
+    doc = uniq("bigdoc")
+    chunks = [{"documentId": doc, "sectionPath": "s%d" % i, "content": "filler body %d" % i}
+              for i in range(5000)]
+    code, _ = http("POST", "/api/documents", json.dumps(chunks).encode(),
+                   {"Content-Type": "application/json"}, timeout=120)
+    return code in (400, 413), "code=%s (expected 400/413 for an over-cap batch)" % code
+
+
+@case("SA25", "M", "forbidden delete does not leak a restricted doc's existence (PT-03)")
+def sa25():
+    word = uniq("delsecret")
+    name = "%s.md" % word
+    ingest(name, "The %s payroll total is 9.1 million.\n" % word, acl=["FINANCE"])
+    fcode, fbody = http("DELETE", "/api/documents/%s" % name)                 # anon, restricted doc
+    ucode, ubody = http("DELETE", "/api/documents/%s" % uniq("nodoc"))        # anon, unknown id
+
+    def deleted(b):
+        try:
+            return json.loads(b).get("deleted")
+        except (ValueError, AttributeError):
+            return None
+    # the oracle is any observable difference between restricted and unknown; the echoed documentId is
+    # just input reflection (identical in both) and is not a leak.
+    indistinguishable = fcode == 200 and fcode == ucode and deleted(fbody) == 0 == deleted(ubody)
+    http("DELETE", "/api/documents/%s" % name, headers={"X-Roles": "FINANCE"})  # cleanup
+    return indistinguishable, "restricted=(%s,del=%s) unknown=(%s,del=%s)" % (
+        fcode, deleted(fbody), ucode, deleted(ubody))
+
+
+@case("SA26", "M", "version metadata of a restricted doc is ACL-protected (PT-04)")
+def sa26():
+    word = uniq("vermeta")
+    name = "%s.md" % word
+    ingest(name, "The %s board vote tally is 7 to 2.\n" % word, acl=["BOARD"])
+    acode, abody = http("GET", "/api/documents/%s/version" % name)                       # anon
+    rcode, _ = http("GET", "/api/documents/%s/version" % name, headers={"X-Roles": "BOARD"})  # authorized
+    leaked = acode == 200 and "docHash" in (abody or "")
+    http("DELETE", "/api/documents/%s" % name, headers={"X-Roles": "BOARD"})              # cleanup
+    return (not leaked) and rcode == 200, "anon=%s(leakedHash=%s) authorized=%s" % (acode, leaked, rcode)
+
+
 def main():
     global BASE
     ap = argparse.ArgumentParser()

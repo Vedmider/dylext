@@ -26,3 +26,7 @@ FALLBACK | symbols.kind column in schema | search_symbols (sql files unsupported
 VIOLATION-AVOID | locating import lines/record decls for edit anchors | dx outline gives symbols not import lines | edit anchors need exact text | scoped grep on 2 files
 FALLBACK | symbols/edges columns (language, dst_recv) | n/a (.sql not indexed) | dylext skips sql | scoped grep migrations
 FALLBACK | locate gateway implementation | repo_overview/list_repos | gateway is a shell-launched component not in the indexed modules | scoped grep agents/tester/gateway.sh
+
+
+FALLBACK | enumerate all HTTP endpoints (annotation-bearing files) + all application services in sestacon/dylext for the API decomposition | dx search_symbols "Controller" (app-first) returned 3 of 5 web classes — missed RetrieveController + GlobalExceptionHandler (no @RestController/@PostMapping-aware or by-annotation search; search is name-token lexical) | bash `grep -rln` scoped to each repo's src/main/java for RequestMapping/PostMapping/RestController and class/Service names | candidate tooling gap: no "find symbols by annotation/decorator" capability (AT candidate)
+VERIFY | sestacon controller/service bodies + dylext dispatch/index/freshness/verify flows for the decomposition | dx outline + expand used as primary source for every stage | cross-checked a few file lists with scoped bash grep; matched
