@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   java:
-    name: Java — Maven verify (unit + Testcontainers IT)
+    name: Java — unit & component tests (Maven)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,10 +23,10 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      # ubuntu-latest ships a running Docker daemon, so the failsafe pgvector
-      # Testcontainers integration tests run without extra setup.
-      - name: Build, unit + integration tests
-        run: mvn -B -ntp clean verify
+      # Surefire only: unit + component (web-slice) tests. The Docker-backed Testcontainers
+      # integration tests (failsafe, *IT) are not run in CI.
+      - name: Build, unit + component tests
+        run: mvn -B -ntp clean test
 
   parser-go:
     name: Go parser sidecar
