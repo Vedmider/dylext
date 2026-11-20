@@ -6,7 +6,7 @@ JAR="$GW/target/dylext-gateway-0.2.0.jar"
 LOG=/tmp/dylext-gateway.log
 PORT=18070
 ENV=/local/IdeaProjects/dylext/env.sh
-MATCH='[d]ylext-gateway-0.2.0.jar'   # bracket trick: never match this script's own command line
+MATCH='[d]ylext-gateway-.*\.jar'   # any version; bracket trick never matches this script's own cmdline
 
 case "${1:-}" in
   up)
