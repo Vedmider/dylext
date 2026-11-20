@@ -14,8 +14,10 @@ concurrency:
 
 jobs:
   java:
-    name: Java — unit & component tests (Maven)
+    name: Java — unit, component & integration tests
     runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -23,10 +25,17 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      # Surefire only: unit + component (web-slice) tests. The Docker-backed Testcontainers
-      # integration tests (failsafe, *IT) are not run in CI.
-      - name: Build, unit + component tests
-        run: mvn -B -ntp clean test
+      # Testcontainers pulls service images (pgvector) from Docker Hub; authenticating avoids the
+      # anonymous pull-rate-limit on shared runner IPs. Skipped automatically if the secret is unset.
+      - name: Log in to Docker Hub
+        if: ${{ env.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # Surefire (unit + component) + failsafe (Testcontainers integration, *IT).
+      - name: Build, unit + component + integration tests
+        run: mvn -B -ntp clean verify
 
   parser-go:
     name: Go parser sidecar
