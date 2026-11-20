@@ -1577,6 +1577,44 @@ def sm01(ctx, c):
     c.expect((not blank.ok) and blank.code == -32602, "blank text not rejected -32602: " + show(blank))
 
 
+# ================================================================ PT: pressure-test regressions (agents/tester/analysis/REVIEW-NOTES.md)
+@case("PT06", "impact_of resolves callers of a varargs method", "M",
+      "a varargs method's callers are listed; call arity != declared arity must still resolve (PT-06)")
+def pt06(ctx, c):
+    name = ctx.rname("pt06")
+    r = Repo.create(name)
+    r.write("Log.java",
+            "package p;\npublic class Log {\n"
+            "  static void log(String... xs) { }\n"
+            "  static void note(long x) { }\n"
+            "  static void callThem() { log(\"a\",\"b\",\"c\"); log(); note(5); }\n}\n")
+    r.commit("init")
+    ctx.m.call("index", {"repo": name, "root": r.path})
+    vararg = [s for s in sids(ctx.m, name, "log") if "#log(" in s]
+    widen = [s for s in sids(ctx.m, name, "note") if "#note(" in s]
+    if not vararg or not widen:
+        c.expect(False, "symbols missing: log=%s note=%s" % (vararg, widen))
+        return
+    va = ctx.m.call("impact_of", {"symbolId": vararg[0]}).data.get("callers", [])
+    wd = ctx.m.call("impact_of", {"symbolId": widen[0]}).data.get("callers", [])
+    c.expect(any("callThem" in x for x in wd), "widening caller (control) not resolved: %s" % wd)
+    c.expect(any("callThem" in x for x in va),
+             "varargs caller dropped by strict arity match (PT-06): %s" % va)
+
+
+@case("PT07", "search_symbols contract is honest about fuzzy matching", "L",
+      "the tool description must not claim 'exact' while matching is fuzzy/token-split (PT-07)")
+def pt07(ctx, c):
+    desc = ""
+    for t in ctx.m.rpc("tools/list", {})["result"]["tools"]:
+        if t["name"] == "search_symbols":
+            desc = (t.get("description") or "").lower()
+    c.expect(bool(desc), "search_symbols not advertised")
+    # evidence of fuzziness: a misspelled compound identifier must not be described as 'exact'
+    c.expect("exact" not in desc or "fuzzy" in desc,
+             "description claims 'exact' but matching is fuzzy; align wording: %r" % desc)
+
+
 # ================================================================ reporting / main
 def write_report(path, results, meta):
     gaps = [(cs, c) for cs, st, c, dt in results if st == "GAP"]

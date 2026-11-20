@@ -143,6 +143,30 @@ class ImpactServiceIT {
     }
 
     @Test
+    void varargsCallersAreResolvedRegardlessOfArgumentCount(@TempDir Path dir) throws IOException {
+        Files.createDirectories(dir.resolve("demo"));
+        Files.writeString(dir.resolve("demo/Log.java"), """
+                package demo;
+                public class Log {
+                    static void log(String... xs) { }
+                }
+                """);
+        Files.writeString(dir.resolve("demo/Caller.java"), """
+                package demo;
+                public class Caller {
+                    void many() { Log.log("a", "b", "c"); }
+                    void none() { Log.log(); }
+                }
+                """);
+        index.index("va", dir.toString());
+
+        Impact i = impact.impactOf("va:demo/Log.java:demo.Log#log(String)");
+
+        assertThat(i.callers()).contains("va:demo/Caller.java:demo.Caller#many()",
+                "va:demo/Caller.java:demo.Caller#none()");
+    }
+
+    @Test
     void sameArityOverloadResolvesByInferredLiteralType(@TempDir Path dir) throws IOException {
         Files.createDirectories(dir.resolve("demo"));
         Files.writeString(dir.resolve("demo/Greeter.java"), """

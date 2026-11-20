@@ -306,10 +306,10 @@ public class PgDigestStore implements DigestStore {
         List<Object[]> resolved = new java.util.ArrayList<>();
         for (PendingEdge e : pending) {
             List<Candidate> candidates = byName.computeIfAbsent(e.language() + "\u0000" + e.dstName(), k -> jdbc.query(
-                    "SELECT id, symbol_path, arity, kind FROM symbols WHERE repo = ? AND name = ? "
+                    "SELECT id, symbol_path, arity, kind, signature FROM symbols WHERE repo = ? AND name = ? "
                             + "AND symbol_path <> '<module>' AND kind <> 'FIELD' AND language = ?",
                     (rs, i) -> new Candidate(rs.getString("id"), rs.getString("symbol_path"),
-                            (Integer) rs.getObject("arity"), rs.getString("kind")),
+                            (Integer) rs.getObject("arity"), rs.getString("kind"), rs.getString("signature")),
                     repo, e.dstName(), e.language()));
             if (typeLike(e.recv())) {
                 candidates = candidates.stream().filter(c -> c.ownedBy(e.recv())).toList();   // none = external type
@@ -324,7 +324,8 @@ public class PgDigestStore implements DigestStore {
                 continue;   // truly unresolved: leave pending (as in arity mode)
             }
             List<Candidate> byArity = candidates.stream()
-                    .filter(c -> e.arity() == null || c.arity() == null || c.arity().equals(e.arity()))
+                    .filter(c -> e.arity() == null || c.arity() == null || c.arity().equals(e.arity())
+                            || c.varargsAccepts(e.arity()))
                     .toList();
             if (byArity.isEmpty() && "java".equalsIgnoreCase(e.language())) {
                 continue;   // Java arity is exact: no candidate fits, so the target is external
@@ -378,9 +379,14 @@ public class PgDigestStore implements DigestStore {
                                String language, String srcPath) {
     }
 
-    private record Candidate(String id, String symbolPath, Integer arity, String kind) {
+    private record Candidate(String id, String symbolPath, Integer arity, String kind, String signature) {
         boolean callable() {
             return "METHOD".equals(kind) || "CONSTRUCTOR".equals(kind);
+        }
+
+        /** A varargs method of declared arity N is callable with N-1 (empty varargs) or more args. */
+        boolean varargsAccepts(int callArity) {
+            return signature != null && signature.contains("...") && arity != null && callArity >= arity - 1;
         }
 
         boolean ownedBy(String type) {

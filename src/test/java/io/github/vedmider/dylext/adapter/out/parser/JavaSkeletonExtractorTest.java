@@ -59,6 +59,20 @@ class JavaSkeletonExtractorTest {
     }
 
     @Test
+    void varargsAreMarkedInTheSignatureButNotTheSymbolPath() {
+        String src = """
+                package d;
+                public class V {
+                    static void log(String... xs){}
+                }
+                """;
+        Symbol log = extractor.extract("demo", "d/V.java", src).stream()
+                .filter(s -> s.name().equals("log")).findFirst().orElseThrow();
+        assertThat(log.signature()).isEqualTo("static void log(String... xs)");
+        assertThat(log.symbolPath()).isEqualTo("d.V#log(String)");
+    }
+
+    @Test
     void inferredParamTypesTagCallTargetsWithAllLiteralOrNewArgs() {
         String src = """
                 package d;

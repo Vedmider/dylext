@@ -115,7 +115,8 @@ public class McpDispatcher {
         tools.add(tool("languages", "Languages Dylext can parse and how (in-process or sidecar); unavailable ones are not indexed."));
         tools.add(tool("outline", "File skeleton: every symbol's one-line signature.", "repo", "path"));
         tools.add(tool("search_symbols",
-                "Find a symbol by known name/identifier (exact lexical). Optional pathPrefix (e.g. 'web/') limits it to one module/folder.",
+                "Find a symbol by name/identifier (fuzzy token match — a near or partial name also hits). "
+                        + "Optional pathPrefix (e.g. 'web/') limits it to one module/folder.",
                 "repo", "query"));
         tools.add(tool("get_digest", "Skeleton (+summary if built) for one symbol.", "symbolId"));
         tools.add(tool("set_summary",

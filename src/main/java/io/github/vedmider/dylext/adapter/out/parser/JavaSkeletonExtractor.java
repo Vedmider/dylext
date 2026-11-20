@@ -177,7 +177,7 @@ public class JavaSkeletonExtractor implements io.github.vedmider.dylext.domain.p
                 .reduce("", String::concat);
         String ret = c instanceof MethodDeclaration m ? m.getType().asString() + " " : "";
         String params = c.getParameters().stream()
-                .map(p -> p.getType().asString() + " " + p.getNameAsString())
+                .map(p -> p.getType().asString() + (p.isVarArgs() ? "..." : "") + " " + p.getNameAsString())
                 .reduce((a, b) -> a + ", " + b).orElse("");
         return (mods + ret + c.getNameAsString() + "(" + params + ")").strip();
     }
